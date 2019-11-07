@@ -1,0 +1,492 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  AWS CloudFormation template for launch zabbix container(Use ECS Fargate).
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: default
+    MinLength: 2
+    MaxLength: 10
+    Description: "Enter project name."
+    ConstraintDescription: "Project name must be greater than 2 and less than 10."
+  VpcId:
+    Type: 'AWS::EC2::VPC::Id'
+    Description: "Select VPC id."
+  VpcCidr:
+    Type: String
+    Description: "Enter VPC cidr block."
+  BastionIp:
+    Type: String
+    Description: "Enter bastion server ip. e.g. 10.xx.0.11"
+  SubnetId1:
+    Type: 'AWS::EC2::Subnet::Id'
+    Description: "Select adm public 1a subnet id."
+  SubnetId2:
+    Type: 'AWS::EC2::Subnet::Id'
+    Description: "Select adm public 1c subnet id."
+  SubnetId3:
+    Type: 'AWS::EC2::Subnet::Id'
+    Description: "Select adm private 1a subnet id."
+  SubnetId4:
+    Type: 'AWS::EC2::Subnet::Id'
+    Description: "Select adm private 1c subnet id."
+  SubnetCidr1:
+    Type: String
+    Description: "Enter adm public 1a subnet cidr. e.g. 10.xx.yy.zz"
+  SubnetCidr2:
+    Type: String
+    Description: "Enter adm public 1c subnet cidr. e.g. 10.xx.yy.zz"
+  CertificateArn:
+    Type: String
+    Description: "ACM arn."
+  MasterDBUser:
+    Type: String
+    Description: 'Enter DB master user name.'
+    Default: zabbixuser
+    MinLength: 4
+    MaxLength: 16
+  MasterDBPassword:
+    Type: String
+    Description: 'Enter DB master user password.'
+    Default: zabbixuser
+    MinLength: 8
+    MaxLength: 16
+    NoEcho: true
+
+Resources:
+  # Create IAM Role
+  IamRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: EcsZbxRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "ecs.amazonaws.com"
+                - "ecs-tasks.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+  IamPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      Roles:
+        - !Ref IamRole
+      PolicyName: EcsZbxPolicy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - "ec2:AttachNetworkInterface"
+              - "ec2:CreateNetworkInterface"
+              - "ec2:CreateNetworkInterfacePermission"
+              - "ec2:DeleteNetworkInterface"
+              - "ec2:DeleteNetworkInterfacePermission"
+              - "ec2:Describe*"
+              - "ec2:DetachNetworkInterface"
+              - "elasticloadbalancing:DeregisterInstancesFromLoadBalancer"
+              - "elasticloadbalancing:DeregisterTargets"
+              - "elasticloadbalancing:Describe*"
+              - "elasticloadbalancing:RegisterInstancesWithLoadBalancer"
+              - "elasticloadbalancing:RegisterTargets"
+              - "servicediscovery:DeregisterInstance"
+              - "servicediscovery:Get*"
+              - "servicediscovery:List*"
+              - "servicediscovery:RegisterInstance"
+              - "servicediscovery:UpdateInstanceCustomHealthStatus"
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"
+            Resource: "*"
+
+  # Security groups
+  SecurityGroupAlb:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: "Allow incoming HTTPS connections for zabbix."
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: "from internet."
+      SecurityGroupEgress:
+        - IpProtocol : '-1'
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-adm-zbx-alb-sg"
+
+  SecurityGroupWeb:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: "Allow incoming HTTP connections for zabbix web."
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref SecurityGroupAlb
+          Description: "from zabbix alb."
+      SecurityGroupEgress:
+        - IpProtocol : '-1'
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-adm-zbx-web-sg"
+
+  SecurityGroupServer:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: "Allow incoming zabbix server and agent connections for zabbix."
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 10051
+          ToPort: 10051
+          CidrIp: !Sub "${VpcCidr}/16"
+          Description: !Sub "from ${VpcId} any instances."
+        - IpProtocol: tcp
+          FromPort: 10050
+          ToPort: 10050
+          CidrIp: !Sub "${VpcCidr}/16"
+          Description: !Sub "from ${VpcId} any instances."
+      SecurityGroupEgress:
+        - IpProtocol : '-1'
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-adm-zbx-srv-sg"
+
+  SecurityGroupRds:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: "Allow incoming MySQL connections for zabbix DB."
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: !Sub "${SubnetCidr1}/20"
+          Description: "from adm public subnet 1a."
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: !Sub "${SubnetCidr2}/20"
+          Description: "from adm public subnet 1c."
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: !Sub "${BastionIp}/32"
+          Description: !Sub "from ${ProjectName} bastion server."
+      SecurityGroupEgress:
+        - IpProtocol : '-1'
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-adm-zbx-rds-sg"
+
+  # Launch ALB
+  TargetGroupAlb:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      Name: !Sub "${ProjectName}-adm-zbx-alb-tg"
+      Protocol: HTTP
+      Port: 80
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: 80
+      HealthCheckPath: "/"
+      TargetType: ip
+      VpcId: !Ref VpcId
+  Alb:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Name: !Sub "${ProjectName}-adm-pub-zbx-alb"
+      Type: application
+      Scheme: internet-facing
+      IpAddressType: ipv4
+      SecurityGroups:
+        - !Ref SecurityGroupAlb
+      Subnets:
+        - !Ref SubnetId1
+        - !Ref SubnetId2
+  ListenerAlb:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroupAlb
+      LoadBalancerArn: !Ref Alb
+      Protocol: HTTPS
+      Port: 443
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+
+  # Launch NLB
+  TargetGroupNlb:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      Name: !Sub "${ProjectName}-adm-zbx-nlb-tg"
+      Protocol: TCP
+      Port: 10051
+      HealthCheckProtocol: TCP
+      TargetType: ip
+      VpcId: !Ref VpcId
+  Nlb:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Name: !Sub "${ProjectName}-adm-pub-zbx-nlb"
+      Type: network
+      Scheme: internet-facing
+      Subnets:
+        - !Ref SubnetId1
+        - !Ref SubnetId2
+  ListenerNlb:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroupNlb
+      LoadBalancerArn: !Ref Nlb
+      Protocol: TCP
+      Port: 10051
+
+  # Launch RDS
+  SubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupName: !Sub "${ProjectName}-adm-zbx-rds-subnet"
+      DBSubnetGroupDescription: "for zabbix DB subnet group."
+      SubnetIds:
+        - !Ref SubnetId3
+        - !Ref SubnetId4
+  ParameterGroup:
+    Type: 'AWS::RDS::DBParameterGroup'
+    Properties:
+      Description: "for zabbix DB paramater group."
+      Family: mysql5.7
+  OptionGroup:
+    Type: 'AWS::RDS::OptionGroup'
+    Properties:
+      OptionGroupDescription: "for zabbix DB option group."
+      EngineName: mysql
+      MajorEngineVersion: 5.7
+  DbInstance:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      Engine: MySQL
+      EngineVersion: 5.7.23
+      DBInstanceClass: db.t2.small
+      StorageType: gp2
+      AllocatedStorage: 30
+      DBInstanceIdentifier: !Sub "${ProjectName}-adm-pri-zbx-rds"
+      MasterUsername: !Ref MasterDBUser
+      MasterUserPassword: !Ref MasterDBPassword
+      VPCSecurityGroups:
+        - !Ref SecurityGroupRds
+      DBSubnetGroupName: !Ref SubnetGroup
+      PubliclyAccessible: false
+      DBName: zabbix
+      Port: 3306
+      DBParameterGroupName: !Ref ParameterGroup
+      OptionGroupName: !Ref OptionGroup
+      BackupRetentionPeriod: 3
+      PreferredBackupWindow: '14:30-15:00'
+      AutoMinorVersionUpgrade: false
+      PreferredMaintenanceWindow: 'sat:15:00-sat:15:30'
+
+  # Create Cloudwatch log group
+  LogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: !Sub "${ProjectName}-adm-zbx-logs"
+      RetentionInDays: 7
+
+  # Create ECS cluster
+  EcsCluster:
+    Type: 'AWS::ECS::Cluster'
+    Properties:
+      ClusterName: !Sub "${ProjectName}-adm-zbx-ecs-cluster"
+
+  # Create zabbix server task definition
+  TaskServer:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      Cpu: 512
+      Memory: 1024
+      ExecutionRoleArn: !GetAtt IamRole.Arn
+      Family: zabbix-server
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ContainerDefinitions:
+        - Name: zabbix-server-mysql
+          Image: zabbix/zabbix-server-mysql:alpine-trunk
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: ap-northeast-1
+              awslogs-stream-prefix: zabbix
+          MemoryReservation: 512
+          PortMappings:
+            - Protocol: tcp
+              HostPort: 10051
+              ContainerPort: 10051
+          Environment:
+            - Name: DB_SERVER_HOST
+              Value: !GetAtt DbInstance.Endpoint.Address
+            - Name: DB_SERVER_PORT
+              Value: 3306
+            - Name: MYSQL_DATABASE
+              Value: zabbix
+            - Name: MYSQL_USER
+              Value: !Ref MasterDBUser
+            - Name: MYSQL_PASSWORD
+              Value: !Ref MasterDBPassword
+            - Name: ZBX_DEBUGLEVEL
+              Value: 3
+        - Name: zabbix-agent
+          Image: zabbix/zabbix-agent:alpine-trunk
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: ap-northeast-1
+              awslogs-stream-prefix: zabbix
+          MemoryReservation: 256
+          PortMappings:
+            - Protocol: tcp
+              HostPort: 10050
+              ContainerPort: 10050
+          Environment:
+            - Name: ZBX_SERVER_HOST
+              Value: 127.0.0.1
+            - Name: ZBX_ACTIVESERVERS
+              Value: 127.0.0.1:10050
+            - Name: ZBX_HOSTNAME
+              Value: Zabbix server
+        - Name: postfix
+          Image: catatnight/postfix
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: ap-northeast-1
+              awslogs-stream-prefix: zabbix
+          MemoryReservation: 256
+          PortMappings:
+            - Protocol: tcp
+              HostPort: 25
+              ContainerPort: 25
+          Environment:
+            - Name: maildomain
+              Value: smtp.example.jp
+            - Name: smtp_user
+              Value: zbx_smtpuser:U9fixwLM
+
+  # Launch zabbix server
+  ServiceServer:
+    Type: 'AWS::ECS::Service'
+    Properties:
+      Cluster: !Ref EcsCluster
+      ServiceName: zabbix-server-mysql
+      LaunchType: FARGATE
+      DesiredCount: 1
+      HealthCheckGracePeriodSeconds: 30
+      LoadBalancers:
+        - ContainerName: zabbix-server-mysql
+          ContainerPort: 10051
+          TargetGroupArn: !Ref TargetGroupNlb
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref SecurityGroupServer
+          Subnets:
+            - !Ref SubnetId1
+            - !Ref SubnetId2
+      TaskDefinition: !Ref TaskServer
+
+  # Create zabbix web task definition
+  TaskWeb:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      Cpu: 256
+      Memory: 512
+      ExecutionRoleArn: !GetAtt IamRole.Arn
+      Family: zabbix-web
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ContainerDefinitions:
+        - Name: zabbix-web-nginx-mysql
+          Image: zabbix/zabbix-web-nginx-mysql:alpine-trunk
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: ap-northeast-1
+              awslogs-stream-prefix: zabbix
+          MemoryReservation: 512
+          PortMappings:
+            - Protocol: tcp
+              HostPort: 80
+              ContainerPort: 80
+          Environment:
+            - Name: DB_SERVER_HOST
+              Value: !GetAtt DbInstance.Endpoint.Address
+            - Name: DB_SERVER_PORT
+              Value: 3306
+            - Name: MYSQL_DATABASE
+              Value: zabbix
+            - Name: MYSQL_USER
+              Value: !Ref MasterDBUser
+            - Name: MYSQL_PASSWORD
+              Value: !Ref MasterDBPassword
+            - Name: PHP_TZ
+              Value: Asia/Tokyo
+            - Name: ZBX_SERVER_HOST
+              Value: !GetAtt Nlb.DNSName
+            - Name: ZBX_SERVER_NAME
+              Value: zabbix-server-mysql
+            - Name: ZBX_SERVER_PORT
+              Value: 10051
+
+  # Launch zabbix web
+  ServiceWeb:
+    Type: 'AWS::ECS::Service'
+    Properties:
+      Cluster: !Ref EcsCluster
+      ServiceName: zabbix-web-nginx-mysql
+      LaunchType: FARGATE
+      DesiredCount: 1
+      HealthCheckGracePeriodSeconds: 30
+      LoadBalancers:
+        - ContainerName: zabbix-web-nginx-mysql
+          ContainerPort: 80
+          TargetGroupArn: !Ref TargetGroupAlb
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref SecurityGroupWeb
+          Subnets:
+            - !Ref SubnetId1
+            - !Ref SubnetId2
+      TaskDefinition: !Ref TaskWeb
+
+Outputs:
+  AlbDnsName:
+    Description: "Export web ALB DNS name."
+    Value: !GetAtt Alb.DNSName
+    Export:
+      Name: zabbix-web-alb
