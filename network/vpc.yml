@@ -1,526 +1,382 @@
 ---
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-    AWS CloudFormation template to create network layer.
-    Component is VPC, Subnet, RouteTable, NetworkAcl.
+  network(vpc) layer
 
 Parameters:
-    ProjectName:
-        Type: String
-        Default: default
-        MinLength: 2
-        MaxLength: 10
-        Description: "Please enter project name."
-    Env:
-        Type: String
-        Default: dev
-        AllowedValues:
-            - dev
-            - stg
-            - prd
-        Description: "Please select the environment to create."
-    Segment:
-        Type: Number
-        Default: 10
-        MinValue: 0
-        MaxValue: 255
-        Description: "Specify the range of the second octet. 10.XX.0.0/16"
+  ProjectName:
+    Type: String
+    Default: default
+    MinLength: 2
+    MaxLength: 10
+    Description: "Project(Service) name"
+  Env:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - stg
+      - prd
+    Description: "Environment"
+  Segment:
+    Type: Number
+    Default: 10
+    MinValue: 0
+    MaxValue: 255
+    Description: "Range of the second octet(e.g. 10.XX.0.0/16)"
+
+Mappings:
+  AZRegions:
+    ap-northeast-1:
+      AZs: ["a", "c", "d"]
 
 Resources:
-    # VPC
-    ProjectVpc:
-        Type: 'AWS::EC2::VPC'
-        Properties:
-            CidrBlock: !Join
-                - "."
-                - - "10"
-                  - !Ref Segment
-                  - "0.0/20"
-            InstanceTenancy: default
-            EnableDnsSupport: true
-            EnableDnsHostnames: true
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - "vpc"
-                        - !Ref ProjectName
-                        - !Ref Env
+  # VPC
+  Vpc:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      CidrBlock: !Sub "10.${Segment}.0.0/16"
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-vpc"
+        - Key: Env
+          Value: !Ref Env
 
-    # adm subnets
-    SubnetAdmPub1a:
-        Type: 'AWS::EC2::Subnet'
-        Properties:
-            CidrBlock: !Join
-                - "."
-                - - "10"
-                  - !Ref Segment
-                  - "0.0/25"
-            AvailabilityZone: ap-northeast-1a
-            VpcId: !Ref ProjectVpc
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - !Ref ProjectName
-                        - "adm-pub-1a-subnet"
-    SubnetAdmPub1c:
-        Type: 'AWS::EC2::Subnet'
-        Properties:
-            CidrBlock: !Join
-                - "."
-                - - "10"
-                  - !Ref Segment
-                  - "1.0/25"
-            AvailabilityZone: ap-northeast-1c
-            VpcId: !Ref ProjectVpc
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - !Ref ProjectName
-                        - "adm-pub-1c-subnet"
-    SubnetAdmPri1a:
-        Type: 'AWS::EC2::Subnet'
-        Properties:
-            CidrBlock: !Join
-                - "."
-                - - "10"
-                  - !Ref Segment
-                  - "0.128/25"
-            AvailabilityZone: ap-northeast-1a
-            VpcId: !Ref ProjectVpc
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - !Ref ProjectName
-                        - "adm-pri-1a-subnet"
-    SubnetAdmPri1c:
-        Type: 'AWS::EC2::Subnet'
-        Properties:
-            CidrBlock: !Join
-                - "."
-                - - "10"
-                  - !Ref Segment
-                  - "1.128/25"
-            AvailabilityZone: ap-northeast-1c
-            VpcId: !Ref ProjectVpc
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - !Ref ProjectName
-                        - "adm-pri-1c-subnet"
+  # Subnets
+  SubnetAdmPub1:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone:
+        Fn::Sub:
+          - "${AWS::Region}${AZ}"
+          - AZ: !Select [ 0, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      CidrBlock: !Sub "10.${Segment}.0.0/25"
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-adm-pub-mono-subnet"
+        - Key: Env
+          Value: !Ref Env
+  SubnetAdmPub2:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone:
+        Fn::Sub:
+          - "${AWS::Region}${AZ}"
+          - AZ: !Select [ 1, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      CidrBlock: !Sub "10.${Segment}.1.0/25"
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-adm-pub-di-subnet"
+        - Key: Env
+          Value: !Ref Env
+  SubnetAdmPri1:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone:
+        Fn::Sub:
+          - "${AWS::Region}${AZ}"
+          - AZ: !Select [ 0, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      CidrBlock: !Sub "10.${Segment}.0.128/25"
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-adm-pri-mono-subnet"
+        - Key: Env
+          Value: !Ref Env
+  SubnetAdmPri2:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone:
+        Fn::Sub:
+          - "${AWS::Region}${AZ}"
+          - AZ: !Select [ 1, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      CidrBlock: !Sub "10.${Segment}.1.128/25"
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-adm-pri-di-subnet"
+        - Key: Env
+          Value: !Ref Env
+  SubnetPub1:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone:
+        Fn::Sub:
+          - "${AWS::Region}${AZ}"
+          - AZ: !Select [ 0, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      CidrBlock: !Sub "10.${Segment}.10.0/24"
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-pub-mono-subnet"
+        - Key: Env
+          Value: !Ref Env
+  SubnetPub2:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone:
+        Fn::Sub:
+          - "${AWS::Region}${AZ}"
+          - AZ: !Select [ 1, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      CidrBlock: !Sub "10.${Segment}.20.0/24"
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-pub-di-subnet"
+        - Key: Env
+          Value: !Ref Env
+  SubnetPub3:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone:
+        Fn::Sub:
+          - "${AWS::Region}${AZ}"
+          - AZ: !Select [ 2, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      CidrBlock: !Sub "10.${Segment}.30.0/24"
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-pub-tri-subnet"
+        - Key: Env
+          Value: !Ref Env
+  SubnetPri1:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone:
+        Fn::Sub:
+          - "${AWS::Region}${AZ}"
+          - AZ: !Select [ 0, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      CidrBlock: !Sub "10.${Segment}.12.0/24"
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-pri-mono-subnet"
+        - Key: Env
+          Value: !Ref Env
+  SubnetPri2:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone:
+        Fn::Sub:
+          - "${AWS::Region}${AZ}"
+          - AZ: !Select [ 1, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      CidrBlock: !Sub "10.${Segment}.22.0/24"
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-pri-di-subnet"
+        - Key: Env
+          Value: !Ref Env
+  SubnetPri3:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone:
+        Fn::Sub:
+          - "${AWS::Region}${AZ}"
+          - AZ: !Select [ 2, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      CidrBlock: !Sub "10.${Segment}.32.0/24"
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-pri-tri-subnet"
+        - Key: Env
+          Value: !Ref Env
 
-    # Service subnets(public)
-    SubnetPub1a:
-        Type: 'AWS::EC2::Subnet'
-        Properties:
-            CidrBlock: !Join
-                - "."
-                - - "10"
-                  - !Ref Segment
-                  - "10.0/25"
-            AvailabilityZone: ap-northeast-1a
-            VpcId: !Ref ProjectVpc
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - !Ref ProjectName
-                        - !Ref Env
-                        - "pub-1a-subnet"
-    SubnetPub1c:
-        Type: 'AWS::EC2::Subnet'
-        Properties:
-            CidrBlock: !Join
-                - "."
-                - - "10"
-                  - !Ref Segment
-                  - "11.0/25"
-            AvailabilityZone: ap-northeast-1c
-            VpcId: !Ref ProjectVpc
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - !Ref ProjectName
-                        - !Ref Env
-                        - "pub-1c-subnet"
-    SubnetPub1d:
-        Type: 'AWS::EC2::Subnet'
-        Properties:
-            CidrBlock: !Join
-                - "."
-                - - "10"
-                  - !Ref Segment
-                  - "12.0/25"
-            AvailabilityZone: ap-northeast-1d
-            VpcId: !Ref ProjectVpc
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - !Ref ProjectName
-                        - !Ref Env
-                        - "pub-1d-subnet"
+  # InternetGateway
+  Igw:
+    Type: "AWS::EC2::InternetGateway"
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-igw"
+        - Key: Env
+          Value: !Ref Env
+  Gw1:
+    Type: "AWS::EC2::VPCGatewayAttachment"
+    Properties:
+      InternetGatewayId: !Ref Igw
+      VpcId: !Ref Vpc
 
-    # Service subnets for Application(private)
-    SubnetPri1aApp:
-        Type: 'AWS::EC2::Subnet'
-        Properties:
-            CidrBlock: !Join
-                - "."
-                - - "10"
-                  - !Ref Segment
-                  - "10.128/26"
-            AvailabilityZone: ap-northeast-1a
-            VpcId: !Ref ProjectVpc
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - !Ref ProjectName
-                        - !Ref Env
-                        - "pri-1a-app-subnet"
-    SubnetPri1cApp:
-        Type: 'AWS::EC2::Subnet'
-        Properties:
-            CidrBlock: !Join
-                - "."
-                - - "10"
-                  - !Ref Segment
-                  - "11.128/26"
-            AvailabilityZone: ap-northeast-1c
-            VpcId: !Ref ProjectVpc
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - !Ref ProjectName
-                        - !Ref Env
-                        - "pri-1c-app-subnet"
-    SubnetPri1dApp:
-        Type: 'AWS::EC2::Subnet'
-        Properties:
-            CidrBlock: !Join
-                - "."
-                - - "10"
-                  - !Ref Segment
-                  - "12.128/26"
-            AvailabilityZone: ap-northeast-1d
-            VpcId: !Ref ProjectVpc
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - !Ref ProjectName
-                        - !Ref Env
-                        - "pri-1d-app-subnet"
+  # DHCP option
+  Dopt:
+    Type: "AWS::EC2::DHCPOptions"
+    Properties:
+      DomainName: !Sub "${AWS::Region}.compute.internal"
+      DomainNameServers:
+        - AmazonProvidedDNS
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-dopt"
+        - Key: Env
+          Value: !Ref Env
+  DhcpAssoc1:
+    Type: "AWS::EC2::VPCDHCPOptionsAssociation"
+    Properties:
+      DhcpOptionsId: !Ref Dopt
+      VpcId: !Ref Vpc
 
-    # Service subnets for Database(private)
-    SubnetPri1aDb:
-        Type: 'AWS::EC2::Subnet'
-        Properties:
-            CidrBlock: !Join
-                - "."
-                - - "10"
-                  - !Ref Segment
-                  - "10.192/26"
-            AvailabilityZone: ap-northeast-1a
-            VpcId: !Ref ProjectVpc
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - !Ref ProjectName
-                        - !Ref Env
-                        - "pri-1a-db-subnet"
-    SubnetPri1cDb:
-        Type: 'AWS::EC2::Subnet'
-        Properties:
-            CidrBlock: !Join
-                - "."
-                - - "10"
-                  - !Ref Segment
-                  - "11.192/26"
-            AvailabilityZone: ap-northeast-1c
-            VpcId: !Ref ProjectVpc
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - !Ref ProjectName
-                        - !Ref Env
-                        - "pri-1c-db-subnet"
-    SubnetPri1dDb:
-        Type: 'AWS::EC2::Subnet'
-        Properties:
-            CidrBlock: !Join
-                - "."
-                - - "10"
-                  - !Ref Segment
-                  - "12.192/26"
-            AvailabilityZone: ap-northeast-1d
-            VpcId: !Ref ProjectVpc
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - !Ref ProjectName
-                        - !Ref Env
-                        - "pri-1d-db-subnet"
+  # Network acl
+  NetworkAcl:
+    Type: "AWS::EC2::NetworkAcl"
+    Properties:
+      VpcId: !Ref Vpc
+  Acl1:
+    Type: "AWS::EC2::NetworkAclEntry"
+    Properties:
+      CidrBlock: "0.0.0.0/0"
+      Egress: true
+      NetworkAclId: !Ref NetworkAcl
+      Protocol: -1
+      RuleAction: allow
+      RuleNumber: 100
+  Acl2:
+    Type: "AWS::EC2::NetworkAclEntry"
+    Properties:
+      CidrBlock: "0.0.0.0/0"
+      NetworkAclId: !Ref NetworkAcl
+      Protocol: -1
+      RuleAction: allow
+      RuleNumber: 100
 
-    Igw:
-        Type: 'AWS::EC2::InternetGateway'
-        Properties:
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - !Ref ProjectName
-                        - !Ref Env
-                        - "igw"
-    Gw1:
-        Type: 'AWS::EC2::VPCGatewayAttachment'
-        Properties:
-            VpcId: !Ref ProjectVpc
-            InternetGatewayId: !Ref Igw
+  # Subnet acl
+  SubnetAcl1:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      NetworkAclId: !Ref NetworkAcl
+      SubnetId: !Ref SubnetAdmPub1
+  SubnetAcl2:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      NetworkAclId: !Ref NetworkAcl
+      SubnetId: !Ref SubnetAdmPub2
+  SubnetAcl3:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      NetworkAclId: !Ref NetworkAcl
+      SubnetId: !Ref SubnetAdmPri1
+  SubnetAcl4:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      NetworkAclId: !Ref NetworkAcl
+      SubnetId: !Ref SubnetAdmPri2
+  SubnetAcl5:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      NetworkAclId: !Ref NetworkAcl
+      SubnetId: !Ref SubnetPub1
+  SubnetAcl6:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      NetworkAclId: !Ref NetworkAcl
+      SubnetId: !Ref SubnetPub2
+  SubnetAcl7:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      NetworkAclId: !Ref NetworkAcl
+      SubnetId: !Ref SubnetPub3
+  SubnetAcl8:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      NetworkAclId: !Ref NetworkAcl
+      SubnetId: !Ref SubnetPri1
+  SubnetAcl9:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      NetworkAclId: !Ref NetworkAcl
+      SubnetId: !Ref SubnetPri2
+  SubnetAcl10:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      NetworkAclId: !Ref NetworkAcl
+      SubnetId: !Ref SubnetPri3
 
-    Dopt:
-        Type: 'AWS::EC2::DHCPOptions'
-        Properties:
-            DomainName: ap-northeast-1.compute.internal
-            DomainNameServers:
-                - AmazonProvidedDNS
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - !Ref ProjectName
-                        - !Ref Env
-                        - "dopt"
-    DhcpAssoc1:
-        Type: 'AWS::EC2::VPCDHCPOptionsAssociation'
-        Properties:
-            VpcId: !Ref ProjectVpc
-            DhcpOptionsId: !Ref Dopt
+  # Route table
+  RtbPub:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-pub-rtb"
+        - Key: Env
+          Value: !Ref Env
+  RtbPri:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-pri-rtb"
+        - Key: Env
+          Value: !Ref Env
 
-    # Network acl
-    NetworkAcl:
-        Type: 'AWS::EC2::NetworkAcl'
-        Properties:
-            VpcId: !Ref ProjectVpc
-    Acl1:
-        Type: 'AWS::EC2::NetworkAclEntry'
-        Properties:
-            CidrBlock: 0.0.0.0/0
-            Egress: true
-            Protocol: '-1'
-            RuleAction: allow
-            RuleNumber: '100'
-            NetworkAclId: !Ref NetworkAcl
-    Acl2:
-        Type: 'AWS::EC2::NetworkAclEntry'
-        Properties:
-            CidrBlock: 0.0.0.0/0
-            Protocol: '-1'
-            RuleAction: allow
-            RuleNumber: '100'
-            NetworkAclId: !Ref NetworkAcl
+  # Subnet route table
+  SubnetRoute1:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref RtbPub
+      SubnetId: !Ref SubnetAdmPub1
+  SubnetRoute2:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref RtbPub
+      SubnetId: !Ref SubnetAdmPub2
+  SubnetRoute3:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref RtbPri
+      SubnetId: !Ref SubnetAdmPri1
+  SubnetRoute4:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref RtbPri
+      SubnetId: !Ref SubnetAdmPri2
+  SubnetRoute5:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref RtbPub
+      SubnetId: !Ref SubnetPub1
+  SubnetRoute6:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref RtbPub
+      SubnetId: !Ref SubnetPub2
+  SubnetRoute7:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref RtbPub
+      SubnetId: !Ref SubnetPub3
+  SubnetRoute8:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref RtbPri
+      SubnetId: !Ref SubnetPri1
+  SubnetRoute9:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref RtbPri
+      SubnetId: !Ref SubnetPri2
+  SubnetRoute10:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref RtbPri
+      SubnetId: !Ref SubnetPri3
 
-    # Subnet acl(adm)
-    SubnetAcl1:
-        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
-        Properties:
-            NetworkAclId: !Ref NetworkAcl
-            SubnetId: !Ref SubnetAdmPub1a
-    SubnetAcl2:
-        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
-        Properties:
-            NetworkAclId: !Ref NetworkAcl
-            SubnetId: !Ref SubnetAdmPub1c
-    SubnetAcl3:
-        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
-        Properties:
-            NetworkAclId: !Ref NetworkAcl
-            SubnetId: !Ref SubnetAdmPri1a
-    SubnetAcl4:
-        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
-        Properties:
-            NetworkAclId: !Ref NetworkAcl
-            SubnetId: !Ref SubnetAdmPri1c
-
-    # Subnet acl(service)
-    SubnetAcl5:
-        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
-        Properties:
-            NetworkAclId: !Ref NetworkAcl
-            SubnetId: !Ref SubnetPub1a
-    SubnetAcl6:
-        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
-        Properties:
-            NetworkAclId: !Ref NetworkAcl
-            SubnetId: !Ref SubnetPub1c
-    SubnetAcl7:
-        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
-        Properties:
-            NetworkAclId: !Ref NetworkAcl
-            SubnetId: !Ref SubnetPub1d
-    SubnetAcl8:
-        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
-        Properties:
-            NetworkAclId: !Ref NetworkAcl
-            SubnetId: !Ref SubnetPri1aApp
-    SubnetAcl9:
-        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
-        Properties:
-            NetworkAclId: !Ref NetworkAcl
-            SubnetId: !Ref SubnetPri1cApp
-    SubnetAcl10:
-        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
-        Properties:
-            NetworkAclId: !Ref NetworkAcl
-            SubnetId: !Ref SubnetPri1dApp
-    SubnetAcl11:
-        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
-        Properties:
-            NetworkAclId: !Ref NetworkAcl
-            SubnetId: !Ref SubnetPri1aDb
-    SubnetAcl12:
-        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
-        Properties:
-            NetworkAclId: !Ref NetworkAcl
-            SubnetId: !Ref SubnetPri1cDb
-    SubnetAcl13:
-        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
-        Properties:
-            NetworkAclId: !Ref NetworkAcl
-            SubnetId: !Ref SubnetPri1dDb
-
-    # Route table
-    RtbPub:
-        Type: 'AWS::EC2::RouteTable'
-        Properties:
-            VpcId: !Ref ProjectVpc
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - !Ref ProjectName
-                        - !Ref Env
-                        - "pub-rtb"
-    RtbPriApp:
-        Type: 'AWS::EC2::RouteTable'
-        Properties:
-            VpcId: !Ref ProjectVpc
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - !Ref ProjectName
-                        - !Ref Env
-                        - "pri-app-rtb"
-    RtbPriDb:
-        Type: 'AWS::EC2::RouteTable'
-        Properties:
-            VpcId: !Ref ProjectVpc
-            Tags:
-                - Key: Name
-                  Value: !Join
-                      - "-"
-                      - - !Ref ProjectName
-                        - !Ref Env
-                        - "pri-db-rtb"
-
-    # Subnet route table(adm)
-    SubnetRoute1:
-        Type: 'AWS::EC2::SubnetRouteTableAssociation'
-        DependsOn: RtbPub
-        Properties:
-            RouteTableId: !Ref RtbPub
-            SubnetId: !Ref SubnetAdmPub1a
-    SubnetRoute2:
-        Type: 'AWS::EC2::SubnetRouteTableAssociation'
-        DependsOn: RtbPub
-        Properties:
-            RouteTableId: !Ref RtbPub
-            SubnetId: !Ref SubnetAdmPub1c
-    SubnetRoute3:
-        Type: 'AWS::EC2::SubnetRouteTableAssociation'
-        DependsOn: RtbPriDb
-        Properties:
-            RouteTableId: !Ref RtbPriDb
-            SubnetId: !Ref SubnetAdmPri1a
-    SubnetRoute4:
-        Type: 'AWS::EC2::SubnetRouteTableAssociation'
-        DependsOn: RtbPriDb
-        Properties:
-            RouteTableId: !Ref RtbPriDb
-            SubnetId: !Ref SubnetAdmPri1c
-
-    # Subnet route table(service)
-    SubnetRoute5:
-        Type: 'AWS::EC2::SubnetRouteTableAssociation'
-        DependsOn: RtbPub
-        Properties:
-            RouteTableId: !Ref RtbPub
-            SubnetId: !Ref SubnetPub1a
-    SubnetRoute6:
-        Type: 'AWS::EC2::SubnetRouteTableAssociation'
-        DependsOn: RtbPub
-        Properties:
-            RouteTableId: !Ref RtbPub
-            SubnetId: !Ref SubnetPub1c
-    SubnetRoute7:
-        Type: 'AWS::EC2::SubnetRouteTableAssociation'
-        DependsOn: RtbPub
-        Properties:
-            RouteTableId: !Ref RtbPub
-            SubnetId: !Ref SubnetPub1d
-    SubnetRoute8:
-        Type: 'AWS::EC2::SubnetRouteTableAssociation'
-        DependsOn: RtbPriApp
-        Properties:
-            RouteTableId: !Ref RtbPriApp
-            SubnetId: !Ref SubnetPri1aApp
-    SubnetRoute9:
-        Type: 'AWS::EC2::SubnetRouteTableAssociation'
-        DependsOn: RtbPriApp
-        Properties:
-            RouteTableId: !Ref RtbPriApp
-            SubnetId: !Ref SubnetPri1cApp
-    SubnetRoute10:
-        Type: 'AWS::EC2::SubnetRouteTableAssociation'
-        DependsOn: RtbPriApp
-        Properties:
-            RouteTableId: !Ref RtbPriApp
-            SubnetId: !Ref SubnetPri1dApp
-    SubnetRoute11:
-        Type: 'AWS::EC2::SubnetRouteTableAssociation'
-        DependsOn: RtbPriDb
-        Properties:
-            RouteTableId: !Ref RtbPriDb
-            SubnetId: !Ref SubnetPri1aDb
-    SubnetRoute12:
-        Type: 'AWS::EC2::SubnetRouteTableAssociation'
-        DependsOn: RtbPriDb
-        Properties:
-            RouteTableId: !Ref RtbPriDb
-            SubnetId: !Ref SubnetPri1cDb
-    SubnetRoute13:
-        Type: 'AWS::EC2::SubnetRouteTableAssociation'
-        DependsOn: RtbPriDb
-        Properties:
-            RouteTableId: !Ref RtbPriDb
-            SubnetId: !Ref SubnetPri1dDb
-
-    # Routing
-    Route1:
-        Type: 'AWS::EC2::Route'
-        Properties:
-            DestinationCidrBlock: 0.0.0.0/0
-            RouteTableId: !Ref RtbPub
-            GatewayId: !Ref Igw
-        DependsOn: Gw1
+  # Routing
+  Route:
+    Type: "AWS::EC2::Route"
+    DependsOn: Gw1
+    Properties:
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref Igw
+      RouteTableId: !Ref RtbPub
