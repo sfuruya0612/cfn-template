@@ -1,0 +1,28 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  network(route53) layer
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: default
+    MinLength: 2
+    MaxLength: 10
+    Description: "Project(Service) name"
+
+Resources:
+  Hostedzone:
+    Type: "AWS::Route53::HostedZone"
+    Properties:
+      HostedZoneConfig:
+        Comment: !Sub "${ProjectName} hostedzone"
+      Name: !Sub "${ProjectName}.com"
+      QueryLoggingConfig:
+        CloudWatchLogsLogGroupArn: !GetAtt LogGroup.Arn
+
+  LogGroup:
+    Type: "AWS::Logs::LogGroup"
+    Properties:
+      LogGroupName: !Sub "/aws/route53/${ProjectName}.com"
+      RetentionInDays: 30
