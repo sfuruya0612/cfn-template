@@ -1,0 +1,42 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  storage(s3)
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: default
+    MinLength: 2
+    MaxLength: 10
+    Description: "Project(Service) name"
+  Env:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - stg
+      - prd
+    Description: "Environment"
+
+Resources:
+  # S3 Bucket
+  LogBucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Sub "${ProjectName}-${Env}-logs"
+      LifecycleConfiguration:
+        Rules:
+          - ExpirationInDays: 30
+            Status: "Enabled"
+      Tags:
+        - Key: Env
+          Value: !Ref Env
+
+  DeployBucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Sub "${ProjectName}-${Env}-deploy"
+      Tags:
+        - Key: Env
+          Value: !Ref Env
