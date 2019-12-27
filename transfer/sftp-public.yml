@@ -1,0 +1,226 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  AWS Transfer for SFTP(Public Access)
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: ""
+  Role:
+    Type: String
+    Description: ""
+    Default: "sftp"
+  VpcId:
+    Type: "AWS::EC2::VPC::Id"
+    Description: ""
+  SubnetIds:
+    Type: "List<AWS::EC2::Subnet::Id>"
+    Description: "e.g. \"subnet-123a351e,subnet-456b351e\""
+  # DomainName:
+  #   Type: String
+  #   Description: ""
+
+Outputs:
+  SftpBucketName:
+    Value: !Ref Bucket
+    Export:
+      Name: !Sub "${ProjectName}-${Role}-bucket"
+  SftpUserRole:
+    Value: !GetAtt IamRoleSftpUser.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Role}-iam-role"
+  SftpServerId:
+    Value: !GetAtt SftpServer.ServerId
+    Export:
+      Name: !Sub "${ProjectName}-${Role}-srv"
+
+Resources:
+  Bucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Sub "${ProjectName}-${Role}"
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Role}"
+        - Key: Role
+          Value: !Ref Role
+
+  # VPC SecurityGroup
+  # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-security-group.html
+  SecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "for transfer service vpc endpoint"
+      GroupName: !Sub "${ProjectName}-${Role}-sg"
+      SecurityGroupEgress:
+        - IpProtocol : "-1"
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: "0.0.0.0/0"
+          Description: "from office access"
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Role}-sg"
+        - Key: Role
+          Value: !Ref Role
+
+  # VPCEndpoint
+  # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-vpcendpoint.html
+  SftpEndpoint:
+    Type: "AWS::EC2::VPCEndpoint"
+    Properties:
+      VpcEndpointType: Interface
+      VpcId: !Ref VpcId
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.transfer.server"
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      SubnetIds: !Ref SubnetIds
+
+  # NLB
+  # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-targetgroup.html
+  TargetGroup:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      Name: !Sub "${ProjectName}-${Role}-tg"
+      Protocol: TCP
+      Port: 22
+      HealthCheckProtocol: TCP
+      TargetType: ip
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Role}-tg"
+        - Key: Role
+          Value: !Ref Role
+  # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-loadbalancer.html
+  Nlb:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      Name: !Sub "${ProjectName}-${Role}-nlb"
+      Type: network
+      Scheme: internet-facing
+      Subnets: !Ref SubnetIds
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Role}-nlb"
+        - Key: Role
+          Value: !Ref Role
+  # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-listener.html
+  Listener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+      LoadBalancerArn: !Ref Nlb
+      Protocol: TCP
+      Port: 22
+
+  # IAM Role
+  # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-iam-role.html
+  IamRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Role}-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "transfer.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+  # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-iam-policy
+  IamPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      Roles:
+        - !Ref IamRole
+      PolicyName: !Sub "${ProjectName}-${Role}-policy"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - "logs:CreateLogStream"
+              - "logs:DescribeLogStreams"
+              - "logs:CreateLogGroup"
+              - "logs:PutLogEvents"
+            Resource: "*"
+  IamRoleSftpUser:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Role}user-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "transfer.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+  # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-iam-policy
+  IamPolicySftpUser:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      Roles:
+        - !Ref IamRoleSftpUser
+      PolicyName: !Sub "${ProjectName}-${Role}user-policy"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - "s3:ListBucket"
+              - "s3:GetBucketLocation"
+            Resource: !GetAtt Bucket.Arn
+          - Effect: "Allow"
+            Action:
+              - "s3:PutObject"
+              - "s3:GetObject"
+              - "s3:DeleteObjectVersion"
+              - "s3:DeleteObject"
+              - "s3:GetObjectVersion"
+            Resource: !Join
+                - "/"
+                - - !GetAtt Bucket.Arn
+                  - "*"
+
+  # SFTP
+  # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-transfer-server.html
+  SftpServer:
+    Type: AWS::Transfer::Server
+    Properties:
+      EndpointDetails:
+        VpcEndpointId: !Ref SftpEndpoint
+      EndpointType: VPC_ENDPOINT
+      IdentityProviderType: SERVICE_MANAGED
+      LoggingRole: !GetAtt IamRole.Arn
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Role}-srv"
+        - Key: Role
+          Value: !Ref Role
+
+  # Route53
+  # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-properties-route53-recordset.html
+  # Route53DNSRecord:
+  #   Type: "AWS::Route53::RecordSet"
+  #   Properties:
+  #     Type: A
+  #     AliasTarget:
+  #       DNSName: !GetAtt Nlb.DNSName
+  #       HostedZoneId: !GetAtt Nlb.CanonicalHostedZoneID
+  #     Comment: "NLB for SFTP"
+  #     HostedZoneName: !Ref DomainName
+  #     Name: !Sub "sftp.${DomainName}"

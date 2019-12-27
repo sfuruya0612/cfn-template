@@ -1,0 +1,37 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  AWS Transfer for SFTP User
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: ""
+  Role:
+    Type: String
+    Description: ""
+    Default: "sftp"
+  UserName:
+    Type: String
+    Description: ""
+
+Resources:
+  # SFTP
+  # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-transfer-user.html
+  SftpUser:
+    Type: "AWS::Transfer::User"
+    Properties:
+      HomeDirectory: !Join
+        - "/"
+        - - ""
+          - Fn::ImportValue: !Sub "${ProjectName}-${Role}-bucket"
+          - "*"
+      Role: { "Fn::ImportValue": !Sub "${ProjectName}-${Role}-iam-role" }
+      ServerId: { "Fn::ImportValue": !Sub "${ProjectName}-${Role}-srv" }
+      UserName: !Ref UserName
+      # SshPublicKeys:
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Role}-${UserName}"
+        - Key: Role
+          Value: !Ref Role
+
