@@ -6,7 +6,9 @@ ENV := dev
 
 VPC_ID := vpc-xxx
 VPC_CIDR := $(shell aws ec2 describe-vpcs --profile ${AWS_PROFILE} --region ${AWS_REGION} --vpc-id ${VPC_ID} | jq -r '.Vpcs[].CidrBlock')
-SUBNET_IDS := \"subnet-xxx,subnet-yyy\"
+
+PUB_SUBNET := \"subnet-xxx,subnet-yyy\"
+PRI_SUBNET := \"subnet-zzz,subnet-aaa\"
 
 SSHPUBKEY := $(shell cat ~/.ssh/id_rsa.pub)
 
@@ -22,12 +24,8 @@ create_server:
 			ParameterKey=Env,ParameterValue=${ENV} \
 			ParameterKey=VpcId,ParameterValue=${VPC_ID} \
 			ParameterKey=VpcCidr,ParameterValue=${VPC_CIDR} \
-			ParameterKey=SubnetIds,ParameterValue=${SUBNET_IDS} \
-	&& aws cloudformation wait stack-create-complete \
-		--profile ${AWS_PROFILE} \
-		--region ${AWS_REGION} \
-		--stack-name ${PROJECT_NAME}-${ENV}-sftp-server \
-	&& sh scripts/add-targets.sh ${AWS_PROFILE} ${AWS_REGION} ${PROJECT_NAME} ${ENV}
+			ParameterKey=PubSubnetIds,ParameterValue=${PUB_SUBNET} \
+			ParameterKey=PriSubnetIds,ParameterValue=${PRI_SUBNET}
 
 delete_server:
 	aws cloudformation delete-stack \

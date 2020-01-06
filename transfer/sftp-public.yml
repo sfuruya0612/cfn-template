@@ -24,7 +24,10 @@ Parameters:
   VpcCidr:
     Type: String
     Description: ""
-  SubnetIds:
+  PubSubnetIds:
+    Type: "List<AWS::EC2::Subnet::Id>"
+    Description: "e.g. \"subnet-123a351e,subnet-456b351e\""
+  PriSubnetIds:
     Type: "List<AWS::EC2::Subnet::Id>"
     Description: "e.g. \"subnet-123a351e,subnet-456b351e\""
   # DomainName:
@@ -95,7 +98,7 @@ Resources:
       ServiceName: !Sub "com.amazonaws.${AWS::Region}.transfer.server"
       SecurityGroupIds:
         - !Ref SecurityGroup
-      SubnetIds: !Ref SubnetIds
+      SubnetIds: !Ref PriSubnetIds
 
   # NLB
   # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-targetgroup.html
@@ -122,7 +125,7 @@ Resources:
       Name: !Sub "${ProjectName}-${Env}-${Role}-nlb"
       Type: network
       Scheme: internet-facing
-      Subnets: !Ref SubnetIds
+      Subnets: !Ref PubSubnetIds
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-${Role}-nlb"
@@ -215,6 +218,35 @@ Resources:
                 - - !GetAtt Bucket.Arn
                   - "*"
 
+  IamRoleLambda:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Env}-${Role}-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+  IamPolicyLambda:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref IamRoleLambda
+      PolicyName: !Sub "${ProjectName}-${Env}-${Role}-lambda-policy"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "ec2:*"
+              - "logs:*"
+            Resource: "*"
+
   # SFTP
   # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-transfer-server.html
   SftpServer:
@@ -232,6 +264,55 @@ Resources:
           Value: !Ref Env
         - Key: Role
           Value: !Ref Role
+
+  # Lambda Function
+  # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-lambda-function.html
+  Function:
+    Type: 'AWS::Lambda::Function'
+    DeletionPolicy: 'Delete'
+    Properties:
+      Code:
+        ZipFile: |
+          import cfnresponse
+          import json
+          import boto3
+
+          def lambda_handler(event, context):
+              print('REQUEST RECEIVED:\n' + json.dumps(event))
+              responseData = {}
+
+              if event['RequestType'] == 'Delete':
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                return
+
+              if event['RequestType'] == 'Create':
+                try:
+                  ec2 = boto3.resource('ec2')
+                  enis = event['ResourceProperties']['NetworkInterfaceIds']
+
+                  for index, eni in enumerate(enis):
+                    network_interface = ec2.NetworkInterface(eni)
+                    responseData['IP' + str(index)] = network_interface.private_ip_address
+                    print(responseData)
+
+                except Exception as e:
+                  responseData = {'eror': str(e)}
+                  cfnresponse.send(event, context, cfnresponse.FAILED, responseData)
+                  return
+
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+      Handler: index.lambda_handler
+      Role: !GetAtt IamRoleLambda.Arn
+      Runtime: python3.7
+      Timeout: 10
+
+  # Custom resource
+  # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-cfn-customresource.html
+  GetPrivateIPs:
+    Type: "Custom::GetPrivateIPs"
+    Properties:
+      ServiceToken: !GetAtt Function.Arn
+      NetworkInterfaceIds: !GetAtt SftpEndpoint.NetworkInterfaceIds
 
   # Route53
   # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-properties-route53-recordset.html
