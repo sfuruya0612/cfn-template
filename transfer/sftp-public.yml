@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   AWS Transfer for SFTP server(Public Access)
 
@@ -144,7 +144,7 @@ Resources:
   # IAM Role
   # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-iam-role.html
   IamRole:
-    Type: 'AWS::IAM::Role'
+    Type: "AWS::IAM::Role"
     Properties:
       RoleName: !Sub "${ProjectName}-${Env}-${Role}-role"
       AssumeRolePolicyDocument:
@@ -159,7 +159,7 @@ Resources:
       Path: /
   # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-iam-policy
   IamPolicy:
-    Type: 'AWS::IAM::Policy'
+    Type: "AWS::IAM::Policy"
     Properties:
       Roles:
         - !Ref IamRole
@@ -176,7 +176,7 @@ Resources:
             Resource: "*"
 
   IamRoleSftpUser:
-    Type: 'AWS::IAM::Role'
+    Type: "AWS::IAM::Role"
     Properties:
       RoleName: !Sub "${ProjectName}-${Env}-${Role}-user-role"
       AssumeRolePolicyDocument:
@@ -190,7 +190,7 @@ Resources:
               - "sts:AssumeRole"
       Path: /
   IamPolicySftpUser:
-    Type: 'AWS::IAM::Policy'
+    Type: "AWS::IAM::Policy"
     Properties:
       Roles:
         - !Ref IamRoleSftpUser
@@ -218,7 +218,7 @@ Resources:
   # SFTP
   # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-transfer-server.html
   SftpServer:
-    Type: AWS::Transfer::Server
+    Type: "AWS::Transfer::Server"
     Properties:
       EndpointDetails:
         VpcEndpointId: !Ref SftpEndpoint
