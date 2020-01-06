@@ -243,7 +243,8 @@ Resources:
         Statement:
           - Effect: Allow
             Action:
-              - "ec2:*"
+              - "ec2:DescribeNetworkInterfaces"
+              - "elasticloadbalancing:RegisterTargets"
               - "logs:*"
             Resource: "*"
 
@@ -276,35 +277,58 @@ Resources:
           import cfnresponse
           import json
           import boto3
+          import os
 
           def lambda_handler(event, context):
-              print('REQUEST RECEIVED:\n' + json.dumps(event))
+              print("REQUEST RECEIVED:\n" + json.dumps(event))
               responseData = {}
 
-              if event['RequestType'] == 'Delete':
+              if event['RequestType'] == "Delete":
                 cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
                 return
 
-              if event['RequestType'] == 'Create':
+              if event['RequestType'] == "Create":
                 try:
-                  ec2 = boto3.resource('ec2')
-                  enis = event['ResourceProperties']['NetworkInterfaceIds']
+                  ec2 = boto3.client('ec2')
+                  elbv2 = boto3.client('elbv2')
 
-                  for index, eni in enumerate(enis):
-                    network_interface = ec2.NetworkInterface(eni)
-                    responseData['IP' + str(index)] = network_interface.private_ip_address
-                    print(responseData)
+                  ids = event['ResourceProperties']['NetworkInterfaceIds']
+                  arn = os.environ['TARGETGROUP_ARN']
+
+                  for index, i in enumerate(ids):
+                    interface = ec2.describe_network_interfaces(
+                      NetworkInterfaceIds=[
+                        i,
+                      ],
+                    )
+
+                    ip = interface['NetworkInterfaces'][0]['PrivateIpAddress']
+                    elbv2.register_targets(
+                      TargetGroupArn=arn,
+                      Targets=[
+                        {
+                          'Id': ip,
+                          'Port': 22,
+                        },
+                      ]
+                    )
+
+                    responseData['IP' + str(index)] = ip
 
                 except Exception as e:
-                  responseData = {'eror': str(e)}
+                  responseData = {'error': str(e)}
                   cfnresponse.send(event, context, cfnresponse.FAILED, responseData)
                   return
 
                 cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+      Description: "Register IP in VPC Endpoint network interface to TargetGroup"
+      Environment:
+        Variables:
+          "TARGETGROUP_ARN": !Ref TargetGroup
       Handler: index.lambda_handler
       Role: !GetAtt IamRoleLambda.Arn
-      Runtime: python3.7
-      Timeout: 10
+      Runtime: python3.8
+      Timeout: 30
 
   # Custom resource
   # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-cfn-customresource.html
@@ -325,4 +349,4 @@ Resources:
   #       HostedZoneId: !GetAtt Nlb.CanonicalHostedZoneID
   #     Comment: "NLB for SFTP"
   #     HostedZoneName: !Ref DomainName
-  #     Name: !Sub "sftp.${DomainName}"
+  #     Name: !Sub "${Env}-sftp.${DomainName}"
