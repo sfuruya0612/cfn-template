@@ -7,28 +7,38 @@ Parameters:
   ProjectName:
     Type: String
     Default: default
-    MinLength: 2
-    MaxLength: 10
     Description: "Project(Service) name"
+    MaxLength: 10
+    MinLength: 2
   Env:
     Type: String
     Default: dev
+    Description: "Environment"
     AllowedValues:
       - dev
       - stg
       - prd
-    Description: "Environment"
   Segment:
     Type: Number
     Default: 10
-    MinValue: 0
-    MaxValue: 255
     Description: "Range of the second octet(e.g. 10.XX.0.0/16)"
+    MaxValue: 255
+    MinValue: 0
+  Logging:
+    Type: String
+    Default: false
+    Description: "(Option) VPC flow log to S3"
+    AllowedValues:
+      - true
+      - false
 
 Mappings:
   AZRegions:
     ap-northeast-1:
       AZs: ["a", "c", "d"]
+
+Conditions:
+  Logging: !Equals [ !Ref Logging, "true" ]
 
 Resources:
   # VPC
@@ -45,6 +55,17 @@ Resources:
         - Key: Env
           Value: !Ref Env
 
+  # VPC Flow log
+  FlowLog:
+    Type: AWS::EC2::FlowLog
+    Condition: Logging
+    Properties:
+      LogDestination : !Sub "arn:aws:s3:::${ProjectName}-${Env}-logs"
+      LogDestinationType : s3
+      ResourceId : !Ref Vpc
+      ResourceType : VPC
+      TrafficType : ALL
+
   # Subnets
   SubnetAdmPub1:
     Type: "AWS::EC2::Subnet"
@@ -58,7 +79,7 @@ Resources:
       VpcId: !Ref Vpc
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Env}-adm-pub-mono-subnet"
+          Value: !Sub "${ProjectName}-${Env}-adm-pub-uno-subnet"
         - Key: Env
           Value: !Ref Env
   SubnetAdmPub2:
@@ -73,7 +94,7 @@ Resources:
       VpcId: !Ref Vpc
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Env}-adm-pub-di-subnet"
+          Value: !Sub "${ProjectName}-${Env}-adm-pub-due-subnet"
         - Key: Env
           Value: !Ref Env
   SubnetAdmPri1:
@@ -87,7 +108,7 @@ Resources:
       VpcId: !Ref Vpc
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Env}-adm-pri-mono-subnet"
+          Value: !Sub "${ProjectName}-${Env}-adm-pri-uno-subnet"
         - Key: Env
           Value: !Ref Env
   SubnetAdmPri2:
@@ -101,7 +122,7 @@ Resources:
       VpcId: !Ref Vpc
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Env}-adm-pri-di-subnet"
+          Value: !Sub "${ProjectName}-${Env}-adm-pri-due-subnet"
         - Key: Env
           Value: !Ref Env
   SubnetPub1:
@@ -116,7 +137,7 @@ Resources:
       VpcId: !Ref Vpc
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Env}-pub-mono-subnet"
+          Value: !Sub "${ProjectName}-${Env}-pub-uno-subnet"
         - Key: Env
           Value: !Ref Env
   SubnetPub2:
@@ -131,7 +152,7 @@ Resources:
       VpcId: !Ref Vpc
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Env}-pub-di-subnet"
+          Value: !Sub "${ProjectName}-${Env}-pub-due-subnet"
         - Key: Env
           Value: !Ref Env
   SubnetPub3:
@@ -146,7 +167,7 @@ Resources:
       VpcId: !Ref Vpc
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Env}-pub-tri-subnet"
+          Value: !Sub "${ProjectName}-${Env}-pub-tre-subnet"
         - Key: Env
           Value: !Ref Env
   SubnetPri1:
@@ -160,7 +181,7 @@ Resources:
       VpcId: !Ref Vpc
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Env}-pri-mono-subnet"
+          Value: !Sub "${ProjectName}-${Env}-pri-uno-subnet"
         - Key: Env
           Value: !Ref Env
   SubnetPri2:
@@ -174,7 +195,7 @@ Resources:
       VpcId: !Ref Vpc
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Env}-pri-di-subnet"
+          Value: !Sub "${ProjectName}-${Env}-pri-due-subnet"
         - Key: Env
           Value: !Ref Env
   SubnetPri3:
@@ -188,7 +209,7 @@ Resources:
       VpcId: !Ref Vpc
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Env}-pri-tri-subnet"
+          Value: !Sub "${ProjectName}-${Env}-pri-tre-subnet"
         - Key: Env
           Value: !Ref Env
 

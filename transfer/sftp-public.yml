@@ -1,17 +1,28 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  AWS Transfer for SFTP(Public Access)
+  AWS Transfer for SFTP server(Public Access)
 
 Parameters:
   ProjectName:
     Type: String
     Description: ""
+  Env:
+    Type: String
+    Default: "dev"
+    Description: ""
+    AllowedValues:
+      - dev
+      - stg
+      - prd
   Role:
     Type: String
-    Description: ""
     Default: "sftp"
+    Description: ""
   VpcId:
     Type: "AWS::EC2::VPC::Id"
+    Description: ""
+  VpcCidr:
+    Type: String
     Description: ""
   SubnetIds:
     Type: "List<AWS::EC2::Subnet::Id>"
@@ -24,26 +35,28 @@ Outputs:
   SftpBucketName:
     Value: !Ref Bucket
     Export:
-      Name: !Sub "${ProjectName}-${Role}-bucket"
+      Name: !Sub "${ProjectName}-${Env}-${Role}-bucket"
   SftpUserRole:
     Value: !GetAtt IamRoleSftpUser.Arn
     Export:
-      Name: !Sub "${ProjectName}-${Role}-iam-role"
+      Name: !Sub "${ProjectName}-${Env}-${Role}-iam-role"
   SftpServerId:
     Value: !GetAtt SftpServer.ServerId
     Export:
-      Name: !Sub "${ProjectName}-${Role}-srv"
+      Name: !Sub "${ProjectName}-${Env}-${Role}-srv"
 
 Resources:
   Bucket:
     Type: "AWS::S3::Bucket"
     Properties:
-      BucketName: !Sub "${ProjectName}-${Role}"
+      BucketName: !Sub "${ProjectName}-${Env}-${Role}"
       VersioningConfiguration:
         Status: Enabled
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Role}"
+          Value: !Sub "${ProjectName}-${Env}-${Role}"
+        - Key: Env
+          Value: !Ref Env
         - Key: Role
           Value: !Ref Role
 
@@ -53,7 +66,7 @@ Resources:
     Type: "AWS::EC2::SecurityGroup"
     Properties:
       GroupDescription: "for transfer service vpc endpoint"
-      GroupName: !Sub "${ProjectName}-${Role}-sg"
+      GroupName: !Sub "${ProjectName}-${Env}-${Role}-sg"
       SecurityGroupEgress:
         - IpProtocol : "-1"
           CidrIp: 0.0.0.0/0
@@ -61,12 +74,14 @@ Resources:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
-          CidrIp: "0.0.0.0/0"
-          Description: "from office access"
+          CidrIp: !Ref VpcCidr
+          Description: ""
       VpcId: !Ref VpcId
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Role}-sg"
+          Value: !Sub "${ProjectName}-${Env}-${Role}-sg"
+        - Key: Env
+          Value: !Ref Env
         - Key: Role
           Value: !Ref Role
 
@@ -87,7 +102,7 @@ Resources:
   TargetGroup:
     Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
     Properties:
-      Name: !Sub "${ProjectName}-${Role}-tg"
+      Name: !Sub "${ProjectName}-${Env}-${Role}-tg"
       Protocol: TCP
       Port: 22
       HealthCheckProtocol: TCP
@@ -95,20 +110,24 @@ Resources:
       VpcId: !Ref VpcId
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Role}-tg"
+          Value: !Sub "${ProjectName}-${Env}-${Role}-tg"
+        - Key: Env
+          Value: !Ref Env
         - Key: Role
           Value: !Ref Role
   # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-loadbalancer.html
   Nlb:
     Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
     Properties:
-      Name: !Sub "${ProjectName}-${Role}-nlb"
+      Name: !Sub "${ProjectName}-${Env}-${Role}-nlb"
       Type: network
       Scheme: internet-facing
       Subnets: !Ref SubnetIds
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Role}-nlb"
+          Value: !Sub "${ProjectName}-${Env}-${Role}-nlb"
+        - Key: Env
+          Value: !Ref Env
         - Key: Role
           Value: !Ref Role
   # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-listener.html
@@ -127,7 +146,7 @@ Resources:
   IamRole:
     Type: 'AWS::IAM::Role'
     Properties:
-      RoleName: !Sub "${ProjectName}-${Role}-role"
+      RoleName: !Sub "${ProjectName}-${Env}-${Role}-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -144,7 +163,7 @@ Resources:
     Properties:
       Roles:
         - !Ref IamRole
-      PolicyName: !Sub "${ProjectName}-${Role}-policy"
+      PolicyName: !Sub "${ProjectName}-${Env}-${Role}-policy"
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -155,10 +174,11 @@ Resources:
               - "logs:CreateLogGroup"
               - "logs:PutLogEvents"
             Resource: "*"
+
   IamRoleSftpUser:
     Type: 'AWS::IAM::Role'
     Properties:
-      RoleName: !Sub "${ProjectName}-${Role}user-role"
+      RoleName: !Sub "${ProjectName}-${Env}-${Role}-user-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -169,13 +189,12 @@ Resources:
             Action:
               - "sts:AssumeRole"
       Path: /
-  # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-iam-policy
   IamPolicySftpUser:
     Type: 'AWS::IAM::Policy'
     Properties:
       Roles:
         - !Ref IamRoleSftpUser
-      PolicyName: !Sub "${ProjectName}-${Role}user-policy"
+      PolicyName: !Sub "${ProjectName}-${Env}-${Role}-user-policy"
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -208,7 +227,9 @@ Resources:
       LoggingRole: !GetAtt IamRole.Arn
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Role}-srv"
+          Value: !Sub "${ProjectName}-${Env}-${Role}-srv"
+        - Key: Env
+          Value: !Ref Env
         - Key: Role
           Value: !Ref Role
 

@@ -1,21 +1,36 @@
 # DataTransfer template
 
-```
-# Create Transfer for SFTP
-aws cloudformation create-stack \
-    --stack-name transfer-sftp \
-    --template-body file://sftp-public.yml \
-    --capabilities CAPABILITY_NAMED_IAM \
-    --parameters \
-        ParameterKey=ProjectName,ParameterValue=<YOUR PROJECT NAME> \
-        ParameterKey=VpcId,ParameterValue=<VPC ID> \
-        ParameterKey=SubnetIds,ParameterValue=<SUBNET IDS(e.g. \"sg-xxx,sg-yyy,sg-zzz\")>
+## AWS Transfer for SFTP
 
-# Create Transfer for SFTP User
-aws cloudformation create-stack \
-    --stack-name transfer-sftp-user \
-    --template-body file://sftp-user.yml \
-    --parameters \
-        ParameterKey=ProjectName,ParameterValue=<YOUR PROJECT NAME> \
-        ParameterKey=UserName,ParameterValue=<USER NAME>
+### Prepare
+- Edit your Makefile to fit your environment  
+    + `AWS_PROFILE`  
+    + `AWS_REGION`  
+    + `PROJECT_NAME`  
+    + `VPC_ID`  
+    + `SUBNET_IDS`  
+  
+`SUBNET_IDS` specifies **public** subnet id  
+Tokyo region(ap-northeast-1) is supported only 1a, 1c AZ  
+Not supported 1d  
+
+#### Create
+
 ```
+# SFTP Server
+make create_server
+
+# SFTP User
+USER=hoge make create_user
+```
+
+#### Delete
+```
+# SFTP Server
+make delete_server
+
+# SFTP User
+USER=hoge make delete_user
+```
+
+---

@@ -6,7 +6,7 @@ First template to run after creating an AWS account
 # Create Buckets
 aws cloudformation create-stack \
     --stack-name init-buckets \
-    --temlate-body file://s3.yml \
+    --template-body file://s3.yml \
     --parameters \
         ParameterKey=ProjectName,ParameterValue=<YOUR PROJECT NAME> \
         ParameterKey=Env,ParameterValue=<Environment>
@@ -19,7 +19,8 @@ aws cloudformation create-stack \
     --parameters \
         ParameterKey=ProjectName,ParameterValue=<YOUR PROJECT NAME> \
         ParameterKey=Env,ParameterValue=<Environment> \
-        ParameterKey=Segment,ParameterValue=<Network segment>
+        ParameterKey=Segment,ParameterValue=<Network segment> \
+        ParameterKey=Logging,ParameterValue=<true or false>
 
 # Create Route53
 aws cloudformation create-stack \

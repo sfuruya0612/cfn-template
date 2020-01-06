@@ -6,11 +6,22 @@ Parameters:
   ProjectName:
     Type: String
     Description: ""
+  Env:
+    Type: String
+    Default: "dev"
+    Description: ""
+    AllowedValues:
+      - dev
+      - stg
+      - prd
   Role:
     Type: String
-    Description: ""
     Default: "sftp"
+    Description: ""
   UserName:
+    Type: String
+    Description: ""
+  SshPubKey:
     Type: String
     Description: ""
 
@@ -23,15 +34,16 @@ Resources:
       HomeDirectory: !Join
         - "/"
         - - ""
-          - Fn::ImportValue: !Sub "${ProjectName}-${Role}-bucket"
-          - "*"
-      Role: { "Fn::ImportValue": !Sub "${ProjectName}-${Role}-iam-role" }
-      ServerId: { "Fn::ImportValue": !Sub "${ProjectName}-${Role}-srv" }
+          - Fn::ImportValue: !Sub "${ProjectName}-${Env}-${Role}-bucket"
+      Role: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-${Role}-iam-role" }
+      ServerId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-${Role}-srv" }
       UserName: !Ref UserName
-      # SshPublicKeys:
+      SshPublicKeys:
+        - !Ref SshPubKey
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Role}-${UserName}"
+          Value: !Sub "${ProjectName}-${Env}-${Role}-${UserName}"
+        - Key: Env
+          Value: !Ref Env
         - Key: Role
           Value: !Ref Role
-
