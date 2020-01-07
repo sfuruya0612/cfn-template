@@ -1,0 +1,33 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ACM
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: default
+    Description: "Project(Service) name"
+    MaxLength: 10
+    MinLength: 2
+  DomainName:
+    Type: String
+    Description: ""
+
+Outputs:
+  CertificateArn:
+    Value: !Ref Certificate
+    Export:
+      Name: !Sub "${ProjectName}-certificate-arn"
+
+Resources:
+  Certificate:
+    Type: "AWS::CertificateManager::Certificate"
+    Properties:
+      DomainName: !Sub "*.${DomainName}"
+      DomainValidationOptions:
+        - DomainName: !Sub "*.${DomainName}"
+          ValidationDomain: !Ref DomainName
+      SubjectAlternativeNames:
+        - !Ref DomainName
+      ValidationMethod: DNS

@@ -10,19 +10,42 @@ Parameters:
     Description: "Project(Service) name"
     MaxLength: 10
     MinLength: 2
+  DomainName:
+    Type: String
+    Description: ""
+  Logging:
+    Type: String
+    Default: false
+    Description: "(Option) Query log to CloudWatch Logs"
+    AllowedValues:
+      - true
+      - false
+
+Conditions:
+  Logging: !Equals [ !Ref Logging, "true" ]
+
+Outputs:
+  HostedZoneId:
+    Value: !Ref HostedZone
+    Export:
+      Name: !Sub "${ProjectName}-hostedzone-id"
 
 Resources:
-  Hostedzone:
+  # Route53 HostedZone
+  HostedZone:
     Type: "AWS::Route53::HostedZone"
     Properties:
       HostedZoneConfig:
         Comment: !Sub "${ProjectName} hostedzone"
-      Name: !Sub "${ProjectName}.com"
-      QueryLoggingConfig:
-        CloudWatchLogsLogGroupArn: !GetAtt LogGroup.Arn
+      Name: !Ref DomainName
+      QueryLoggingConfig: !If
+        - Logging
+        - CloudWatchLogsLogGroupArn: !GetAtt LogGroup.Arn
+        - !Ref AWS::NoValue
 
+  # CloudWatch LogGroup
   LogGroup:
     Type: "AWS::Logs::LogGroup"
     Properties:
-      LogGroupName: !Sub "/aws/route53/${ProjectName}.com"
+      LogGroupName: !Sub "/aws/route53/${DomainName}"
       RetentionInDays: 30

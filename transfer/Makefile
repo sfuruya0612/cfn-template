@@ -3,6 +3,7 @@ AWS_REGION := ap-northeast-1
 
 PROJECT_NAME := hoge
 ENV := dev
+DOMAIN_NAME := hogehoge.com
 
 VPC_ID := vpc-xxx
 VPC_CIDR := $(shell aws ec2 describe-vpcs --profile ${AWS_PROFILE} --region ${AWS_REGION} --vpc-id ${VPC_ID} | jq -r '.Vpcs[].CidrBlock')
@@ -25,7 +26,8 @@ create_server:
 			ParameterKey=VpcId,ParameterValue=${VPC_ID} \
 			ParameterKey=VpcCidr,ParameterValue=${VPC_CIDR} \
 			ParameterKey=PubSubnetIds,ParameterValue=${PUB_SUBNET} \
-			ParameterKey=PriSubnetIds,ParameterValue=${PRI_SUBNET}
+			ParameterKey=PriSubnetIds,ParameterValue=${PRI_SUBNET} \
+			ParameterKey=DomainName,ParameterValue=${DOMAIN_NAME}
 
 delete_server:
 	aws cloudformation delete-stack \

@@ -1,3 +1,4 @@
+---
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   AWS Transfer for SFTP server(Public Access)
@@ -30,9 +31,9 @@ Parameters:
   PriSubnetIds:
     Type: "List<AWS::EC2::Subnet::Id>"
     Description: "e.g. \"subnet-123a351e,subnet-456b351e\""
-  # DomainName:
-  #   Type: String
-  #   Description: ""
+  DomainName:
+    Type: String
+    Description: ""
 
 Conditions:
   SubDomain: !Equals [ !Ref Env, "prd" ]
@@ -50,6 +51,8 @@ Outputs:
     Value: !GetAtt SftpServer.ServerId
     Export:
       Name: !Sub "${ProjectName}-${Env}-${Role}-srv"
+  SftpDomain:
+    Value: !Ref RecordSet
 
 Resources:
   Bucket:
@@ -347,18 +350,18 @@ Resources:
       ServiceToken: !GetAtt Function.Arn
       NetworkInterfaceIds: !GetAtt SftpEndpoint.NetworkInterfaceIds
 
-  # Route53
+  # Route53 record set
   # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-properties-route53-recordset.html
-  # Route53DNSRecord:
-  #   Type: "AWS::Route53::RecordSet"
-  #   Properties:
-  #     Type: A
-  #     AliasTarget:
-  #       DNSName: !GetAtt Nlb.DNSName
-  #       HostedZoneId: !GetAtt Nlb.CanonicalHostedZoneID
-  #     Comment: "NLB for SFTP"
-  #     HostedZoneName: !Ref DomainName
-  #     Name: !If
-  #       - SubDomain
-  #       - !Sub "${Env}-sftp.${DomainName}"
-  #       - !Sub "sftp.${DomainName}"
+  RecordSet:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt Nlb.DNSName
+        HostedZoneId: !GetAtt Nlb.CanonicalHostedZoneID
+      Comment: "NLB for SFTP"
+      HostedZoneName: !Sub "${DomainName}."
+      Name: !If
+        - SubDomain
+        - !Sub "sftp.${DomainName}"
+        - !Sub "${Env}-sftp.${DomainName}"
+      Type: A
