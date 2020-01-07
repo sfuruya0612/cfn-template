@@ -34,6 +34,9 @@ Parameters:
   #   Type: String
   #   Description: ""
 
+Conditions:
+  SubDomain: !Equals [ !Ref Env, "prd" ]
+
 Outputs:
   SftpBucketName:
     Value: !Ref Bucket
@@ -232,6 +235,8 @@ Resources:
             Action:
               - "sts:AssumeRole"
       Path: /
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
   IamPolicyLambda:
     Type: "AWS::IAM::Policy"
     Properties:
@@ -243,9 +248,8 @@ Resources:
         Statement:
           - Effect: Allow
             Action:
-              - "ec2:DescribeNetworkInterfaces"
+              - "ec2:Describe*"
               - "elasticloadbalancing:RegisterTargets"
-              - "logs:*"
             Resource: "*"
 
   # SFTP
@@ -274,60 +278,65 @@ Resources:
     Properties:
       Code:
         ZipFile: |
+          # -*- coding: utf-8 -*-
+
           import cfnresponse
           import json
           import boto3
           import os
 
           def lambda_handler(event, context):
-              print("REQUEST RECEIVED:\n" + json.dumps(event))
+              print("Request received:\n" + json.dumps(event))
               responseData = {}
 
               if event['RequestType'] == "Delete":
-                cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
-                return
-
-              if event['RequestType'] == "Create":
-                try:
-                  ec2 = boto3.client('ec2')
-                  elbv2 = boto3.client('elbv2')
-
-                  ids = event['ResourceProperties']['NetworkInterfaceIds']
-                  arn = os.environ['TARGETGROUP_ARN']
-
-                  for index, i in enumerate(ids):
-                    interface = ec2.describe_network_interfaces(
-                      NetworkInterfaceIds=[
-                        i,
-                      ],
-                    )
-
-                    ip = interface['NetworkInterfaces'][0]['PrivateIpAddress']
-                    elbv2.register_targets(
-                      TargetGroupArn=arn,
-                      Targets=[
-                        {
-                          'Id': ip,
-                          'Port': 22,
-                        },
-                      ]
-                    )
-
-                    responseData['IP' + str(index)] = ip
-
-                except Exception as e:
-                  responseData = {'error': str(e)}
-                  cfnresponse.send(event, context, cfnresponse.FAILED, responseData)
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
                   return
 
-                cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+              if event['RequestType'] == "Create":
+                  try:
+                      ec2 = boto3.client('ec2')
+                      elbv2 = boto3.client('elbv2')
+
+                      ids = event['ResourceProperties']['NetworkInterfaceIds']
+                      print("NetworkInterfaceIds:" + ','.join(ids))
+
+                      arn = os.environ['TARGETGROUP_ARN']
+                      print("TargetGroup arn:" + arn)
+
+                      for index, i in enumerate(ids):
+                          interface = ec2.describe_network_interfaces(
+                              NetworkInterfaceIds=[
+                                  i,
+                              ],
+                          )
+
+                          ip = interface['NetworkInterfaces'][0]['PrivateIpAddress']
+                          elbv2.register_targets(
+                              TargetGroupArn=arn,
+                              Targets=[
+                                  {
+                                      'Id': ip,
+                                      'Port': 22,
+                                  },
+                              ]
+                          )
+
+                          responseData['IP' + str(index)] = ip
+
+                  except Exception as e:
+                      responseData = {'error': str(e)}
+                      cfnresponse.send(event, context, cfnresponse.FAILED, responseData)
+                      return
+
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
       Description: "Register IP in VPC Endpoint network interface to TargetGroup"
       Environment:
         Variables:
           "TARGETGROUP_ARN": !Ref TargetGroup
       Handler: index.lambda_handler
       Role: !GetAtt IamRoleLambda.Arn
-      Runtime: python3.8
+      Runtime: python3.7
       Timeout: 30
 
   # Custom resource
@@ -349,4 +358,7 @@ Resources:
   #       HostedZoneId: !GetAtt Nlb.CanonicalHostedZoneID
   #     Comment: "NLB for SFTP"
   #     HostedZoneName: !Ref DomainName
-  #     Name: !Sub "${Env}-sftp.${DomainName}"
+  #     Name: !If
+  #       - SubDomain
+  #       - !Sub "${Env}-sftp.${DomainName}"
+  #       - !Sub "sftp.${DomainName}"

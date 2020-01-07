@@ -7,9 +7,9 @@ Parameters:
   ProjectName:
     Type: String
     Default: default
-    MinLength: 2
-    MaxLength: 10
     Description: "Project(Service) name"
+    MaxLength: 10
+    MinLength: 2
 
 Resources:
   Hostedzone:

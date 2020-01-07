@@ -1,0 +1,17 @@
+{
+    "RequestType": "Create",
+    "ServiceToken": "arn:aws:lambda:ap-northeast-1:997779426595:function:ph-dev-sftp-server-Function-1XH275IJ328CD",
+    "ResponseURL": "https://cloudformation-custom-resource-response-apnortheast1.s3-ap-northeast-1.amazonaws.com/arn%3Aaws%3Acloudformation%3Aap-northeast-1%3A997779426595%3Astack/ph-dev-sftp-server/4dabdd00-30ee-11ea-a071-0efa8245db7e%7CGetPrivateIPs%7Cf0b0397e-a122-4b91-8356-8115749cac38?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20200107T020248Z&X-Amz-SignedHeaders=host&X-Amz-Expires=7200&X-Amz-Credential=AKIAI263AXSLMBRIXBRA%2F20200107%2Fap-northeast-1%2Fs3%2Faws4_request&X-Amz-Signature=44b48c15f6b618963b742cc2fbe6728faf1af98926cec87182196c88dc8b4bfb",
+    "StackId": "arn:aws:cloudformation:ap-northeast-1:997779426595:stack/ph-dev-sftp-server/4dabdd00-30ee-11ea-a071-0efa8245db7e",
+    "RequestId": "f0b0397e-a122-4b91-8356-8115749cac38",
+    "LogicalResourceId": "GetPrivateIPs",
+    "PhysicalResourceId": "ph-dev-sftp-server-GetPrivateIPs-18Y7K8RYJCQEH",
+    "ResourceType": "Custom::GetPrivateIPs",
+    "ResourceProperties": {
+        "ServiceToken": "arn:aws:lambda:ap-northeast-1:997779426595:function:ph-dev-sftp-server-Function-1XH275IJ328CD",
+        "NetworkInterfaceIds": [
+            "eni-0c0725319b8124527",
+            "eni-0e9da70cf8d52e2ab"
+        ]
+    }
+}
