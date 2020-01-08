@@ -1,0 +1,44 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  NetworkAcl
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: ""
+  Env:
+    Type: String
+    Default: "dev"
+    Description: ""
+    AllowedValues:
+      - dev
+      - stg
+      - prd
+  Role:
+    Type: String
+    Default: "sftp"
+    Description: ""
+  AllowIP:
+    Type: String
+    Description: "Specified by CIDR"
+  RuleNumber:
+    Type: Number
+    Default: 101
+    MaxValue: 199
+    MinValue: 101
+    Description: "NetworkAcl entry role number"
+
+Resources:
+  NetworkAclEntry:
+    Type: "AWS::EC2::NetworkAclEntry"
+    Properties:
+      CidrBlock: !Ref AllowIP
+      Egress: false
+      NetworkAclId: { 'Fn::ImportValue': !Sub '${ProjectName}-${Env}-${Role}-acl' }
+      PortRange:
+        From: 22
+        To: 22
+      Protocol: 6
+      RuleAction: allow
+      RuleNumber: !Ref RuleNumber

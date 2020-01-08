@@ -11,11 +11,16 @@
     + `AWS_REGION`  
     + `PROJECT_NAME`  
     + `ENV`: Specifies value is *dev*, *stg* and *prd*  
+    + `DOMAIN_NAME`  
     + `VPC_ID`  
-    + `PUB_SUBNET`: Specifies your VPC **public** subnet id  
-    + `PRI_SUBNET`: Specifies your VPC **private** subnet id  
+    + `PUB_CIDR`: NLB is located subnet cidr  
+    + `PUB_SUBNET1` and `PUB_SUBNET2`: Specifies your VPC **public** subnet id  
+    + `PRI_SUBNET`: Specifies your VPC **private** subnet id(only 1a, 1c)  
+    + `ALLOW_IP`  
+    + `RULE`: Network acl rule number  
   
-`PUB_SUBNET` and `PRI_SUBNET` are supported only 1a, 1c AZ in tokyo region(ap-northeast-1)  
+`PRI_SUBNET`  
+VPC endpoint is supported only 1a, 1c AZ in tokyo region(ap-northeast-1)  
 Not supported 1d  
 
 #### Create resources
@@ -24,6 +29,9 @@ Not supported 1d
 # SFTP Server
 make create_server
 
+# Network acl
+make set_acl
+
 # SFTP User
 USER=hoge make create_user
 ```
@@ -31,6 +39,9 @@ USER=hoge make create_user
 #### Delete resources
 
 ``` bash
+# Network acl
+make delete_acl
+
 # SFTP Server
 make delete_server
 

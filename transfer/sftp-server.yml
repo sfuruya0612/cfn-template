@@ -22,12 +22,15 @@ Parameters:
   VpcId:
     Type: "AWS::EC2::VPC::Id"
     Description: ""
-  VpcCidr:
+  PublicCidr:
     Type: String
     Description: ""
-  PubSubnetIds:
-    Type: "List<AWS::EC2::Subnet::Id>"
-    Description: "e.g. \"subnet-123a351e,subnet-456b351e\""
+  PubSubnetId1:
+    Type: "AWS::EC2::Subnet::Id"
+    Description: ""
+  PubSubnetId2:
+    Type: "AWS::EC2::Subnet::Id"
+    Description: ""
   PriSubnetIds:
     Type: "List<AWS::EC2::Subnet::Id>"
     Description: "e.g. \"subnet-123a351e,subnet-456b351e\""
@@ -53,6 +56,10 @@ Outputs:
       Name: !Sub "${ProjectName}-${Env}-${Role}-srv"
   SftpDomain:
     Value: !Ref RecordSet
+  NetworkAcl:
+    Value: !Ref NetworkAcl
+    Export:
+      Name: !Sub "${ProjectName}-${Env}-${Role}-acl"
 
 Resources:
   Bucket:
@@ -83,7 +90,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
-          CidrIp: !Ref VpcCidr
+          CidrIp: !Ref PublicCidr
           Description: ""
       VpcId: !Ref VpcId
       Tags:
@@ -131,7 +138,9 @@ Resources:
       Name: !Sub "${ProjectName}-${Env}-${Role}-nlb"
       Type: network
       Scheme: internet-facing
-      Subnets: !Ref PubSubnetIds
+      Subnets:
+        - !Ref PubSubnetId1
+        - !Ref PubSubnetId2
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-${Role}-nlb"
@@ -276,8 +285,8 @@ Resources:
   # Lambda Function
   # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-lambda-function.html
   Function:
-    Type: 'AWS::Lambda::Function'
-    DeletionPolicy: 'Delete'
+    Type: "AWS::Lambda::Function"
+    DeletionPolicy: "Delete"
     Properties:
       Code:
         ZipFile: |
@@ -365,3 +374,63 @@ Resources:
         - !Sub "sftp.${DomainName}"
         - !Sub "${Env}-sftp.${DomainName}"
       Type: A
+
+  # Network acl
+  # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-network-acl.html
+  NetworkAcl:
+    Type: "AWS::EC2::NetworkAcl"
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-${Role}-acl"
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
+      VpcId: !Ref VpcId
+  NetworkAclEntryIngress1:
+    Type: "AWS::EC2::NetworkAclEntry"
+    Properties:
+      CidrBlock: !Ref PublicCidr
+      Egress: false
+      NetworkAclId: !Ref NetworkAcl
+      PortRange:
+        From: 0
+        To: 65535
+      Protocol: 6
+      RuleAction: allow
+      RuleNumber: 100
+  NetworkAclEntryIngress2:
+    Type: "AWS::EC2::NetworkAclEntry"
+    Properties:
+      CidrBlock: "0.0.0.0/0"
+      Egress: false
+      NetworkAclId: !Ref NetworkAcl
+      PortRange:
+        From: 22
+        To: 22
+      Protocol: 6
+      RuleAction: deny
+      RuleNumber: 200
+  NetworkAclEntryEgress:
+    Type: "AWS::EC2::NetworkAclEntry"
+    Properties:
+      CidrBlock: "0.0.0.0/0"
+      Egress: true
+      NetworkAclId: !Ref NetworkAcl
+      PortRange:
+        From: -1
+        To: -1
+      Protocol: -1
+      RuleAction: allow
+      RuleNumber: 100
+  AclAssociation1:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      SubnetId: !Ref PubSubnetId1
+      NetworkAclId: !Ref NetworkAcl
+  AclAssociation2:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      SubnetId: !Ref PubSubnetId2
+      NetworkAclId: !Ref NetworkAcl
