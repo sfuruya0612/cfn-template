@@ -32,11 +32,6 @@ Parameters:
       - true
       - false
 
-Mappings:
-  AZRegions:
-    ap-northeast-1:
-      AZs: ["a", "c", "d"]
-
 Conditions:
   Logging: !Equals [ !Ref Logging, "true" ]
 
@@ -70,10 +65,7 @@ Resources:
   SubnetAdmPub1:
     Type: "AWS::EC2::Subnet"
     Properties:
-      AvailabilityZone:
-        Fn::Sub:
-          - "${AWS::Region}${AZ}"
-          - AZ: !Select [ 0, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      AvailabilityZone: !Select [ "0", !GetAZs ""]
       CidrBlock: !Sub "10.${Segment}.0.0/25"
       MapPublicIpOnLaunch: true
       VpcId: !Ref Vpc
@@ -85,10 +77,7 @@ Resources:
   SubnetAdmPub2:
     Type: "AWS::EC2::Subnet"
     Properties:
-      AvailabilityZone:
-        Fn::Sub:
-          - "${AWS::Region}${AZ}"
-          - AZ: !Select [ 1, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      AvailabilityZone: !Select [ "1", !GetAZs ""]
       CidrBlock: !Sub "10.${Segment}.1.0/25"
       MapPublicIpOnLaunch: true
       VpcId: !Ref Vpc
@@ -100,10 +89,7 @@ Resources:
   SubnetAdmPri1:
     Type: "AWS::EC2::Subnet"
     Properties:
-      AvailabilityZone:
-        Fn::Sub:
-          - "${AWS::Region}${AZ}"
-          - AZ: !Select [ 0, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      AvailabilityZone: !Select [ "0", !GetAZs ""]
       CidrBlock: !Sub "10.${Segment}.0.128/25"
       VpcId: !Ref Vpc
       Tags:
@@ -114,10 +100,7 @@ Resources:
   SubnetAdmPri2:
     Type: "AWS::EC2::Subnet"
     Properties:
-      AvailabilityZone:
-        Fn::Sub:
-          - "${AWS::Region}${AZ}"
-          - AZ: !Select [ 1, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      AvailabilityZone: !Select [ "1", !GetAZs ""]
       CidrBlock: !Sub "10.${Segment}.1.128/25"
       VpcId: !Ref Vpc
       Tags:
@@ -128,10 +111,7 @@ Resources:
   SubnetPub1:
     Type: "AWS::EC2::Subnet"
     Properties:
-      AvailabilityZone:
-        Fn::Sub:
-          - "${AWS::Region}${AZ}"
-          - AZ: !Select [ 0, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      AvailabilityZone: !Select [ "0", !GetAZs ""]
       CidrBlock: !Sub "10.${Segment}.10.0/24"
       MapPublicIpOnLaunch: true
       VpcId: !Ref Vpc
@@ -143,10 +123,7 @@ Resources:
   SubnetPub2:
     Type: "AWS::EC2::Subnet"
     Properties:
-      AvailabilityZone:
-        Fn::Sub:
-          - "${AWS::Region}${AZ}"
-          - AZ: !Select [ 1, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      AvailabilityZone: !Select [ "1", !GetAZs ""]
       CidrBlock: !Sub "10.${Segment}.20.0/24"
       MapPublicIpOnLaunch: true
       VpcId: !Ref Vpc
@@ -158,10 +135,7 @@ Resources:
   SubnetPub3:
     Type: "AWS::EC2::Subnet"
     Properties:
-      AvailabilityZone:
-        Fn::Sub:
-          - "${AWS::Region}${AZ}"
-          - AZ: !Select [ 2, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      AvailabilityZone: !Select [ "2", !GetAZs ""]
       CidrBlock: !Sub "10.${Segment}.30.0/24"
       MapPublicIpOnLaunch: true
       VpcId: !Ref Vpc
@@ -173,10 +147,7 @@ Resources:
   SubnetPri1:
     Type: "AWS::EC2::Subnet"
     Properties:
-      AvailabilityZone:
-        Fn::Sub:
-          - "${AWS::Region}${AZ}"
-          - AZ: !Select [ 0, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      AvailabilityZone: !Select [ "0", !GetAZs ""]
       CidrBlock: !Sub "10.${Segment}.12.0/24"
       VpcId: !Ref Vpc
       Tags:
@@ -187,10 +158,7 @@ Resources:
   SubnetPri2:
     Type: "AWS::EC2::Subnet"
     Properties:
-      AvailabilityZone:
-        Fn::Sub:
-          - "${AWS::Region}${AZ}"
-          - AZ: !Select [ 1, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      AvailabilityZone: !Select [ "1", !GetAZs ""]
       CidrBlock: !Sub "10.${Segment}.22.0/24"
       VpcId: !Ref Vpc
       Tags:
@@ -201,10 +169,7 @@ Resources:
   SubnetPri3:
     Type: "AWS::EC2::Subnet"
     Properties:
-      AvailabilityZone:
-        Fn::Sub:
-          - "${AWS::Region}${AZ}"
-          - AZ: !Select [ 2, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      AvailabilityZone: !Select [ "2", !GetAZs ""]
       CidrBlock: !Sub "10.${Segment}.32.0/24"
       VpcId: !Ref Vpc
       Tags:

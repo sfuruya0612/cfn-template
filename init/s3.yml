@@ -20,7 +20,8 @@ Parameters:
       - prd
 
 Resources:
-  # S3 Bucket
+  # S3 Buckets
+  # for any logs
   LogBucket:
     Type: "AWS::S3::Bucket"
     Properties:
@@ -30,13 +31,29 @@ Resources:
           - ExpirationInDays: 30
             Status: "Enabled"
       Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
 
+  # for application codes
   DeployBucket:
     Type: "AWS::S3::Bucket"
     Properties:
       BucketName: !Sub "${ProjectName}-${Env}-deploy"
       Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Env
+          Value: !Ref Env
+
+  # for sam cli packages
+  DeployBucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Sub "${ProjectName}-${Env}-sam"
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
