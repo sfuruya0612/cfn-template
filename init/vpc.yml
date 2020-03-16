@@ -35,6 +35,42 @@ Parameters:
 Conditions:
   Logging: !Equals [ !Ref Logging, "true" ]
 
+Outputs:
+  VpcId:
+    Value: !Ref Vpc
+    Export:
+      Name: !Sub "${ProjectName}-${Env}-vpc"
+  VpcCidr:
+    Value: !GetAtt Vpc.CidrBlock
+    Export:
+      Name: !Sub "${ProjectName}-${Env}-vpc-cidr"
+
+  PublicSubnetId1:
+    Value: !Ref SubnetPub1
+    Export:
+      Name: !Sub "${ProjectName}-${Env}-pub-uno-subnet"
+  PublicSubnetId2:
+    Value: !Ref SubnetPub2
+    Export:
+      Name: !Sub "${ProjectName}-${Env}-pub-due-subnet"
+  PublicSubnetId3:
+    Value: !Ref SubnetPub3
+    Export:
+      Name: !Sub "${ProjectName}-${Env}-pub-tri-subnet"
+
+  PrivateSubnetId1:
+    Value: !Ref SubnetPri1
+    Export:
+      Name: !Sub "${ProjectName}-${Env}-pri-uno-subnet"
+  PrivateSubnetId2:
+    Value: !Ref SubnetPri2
+    Export:
+      Name: !Sub "${ProjectName}-${Env}-pri-due-subnet"
+  PrivateSubnetId3:
+    Value: !Ref SubnetPri3
+    Export:
+      Name: !Sub "${ProjectName}-${Env}-pri-tri-subnet"
+
 Resources:
   # VPC
   Vpc:

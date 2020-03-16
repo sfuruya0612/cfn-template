@@ -1,0 +1,230 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Bastion EC2
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: default
+    Description: "Project(Service) name"
+    MaxLength: 10
+    MinLength: 2
+  Env:
+    Type: String
+    Default: dev
+    Description: "Environment"
+    AllowedValues:
+      - dev
+      - stg
+      - prd
+  Role:
+    Type: String
+    Default: "bastion"
+    Description: ""
+  ImageId:
+    Type: "AWS::EC2::Image::Id"
+    Default: "ami-0cd744adeca97abb1"
+    Description: "Ubuntu Server 18.04 LTS (HVM), SSD Volume Type"
+  InstanceType:
+    Type: String
+    Default: t3.nano
+    Description: "Set LaunchTemplate"
+  InstanceType1:
+    Type: String
+    Default: t3.micro
+    Description: "Set AutoScaling SpotFleet Type"
+  InstanceType2:
+    Type: String
+    Default: t3.small
+    Description: "Set AutoScaling SpotFleet Type"
+  InstanceNum:
+    Type: String
+    Default: 1
+    Description: ""
+
+Resources:
+  # IAM Role
+  IamRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+      RoleName: !Sub "${ProjectName}-${Env}-${Role}-iam-role"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM"
+  InstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: "/"
+      Roles:
+        - !Ref IamRole
+
+  # SecurityGroup
+  ClbSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "for bastion clb"
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: 50022
+          ToPort: 50022
+          CidrIp: "0.0.0.0/0"
+      VpcId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-${Role}-clb-sg"
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
+
+  Ec2SecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "for bastion ec2"
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !GetAtt ClbSecurityGroup.GroupId
+      VpcId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-${Role}-ec2-sg"
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
+
+  # LaunchTemplate
+  LaunchTemplate:
+    Type: "AWS::EC2::LaunchTemplate"
+    Properties:
+      LaunchTemplateData:
+        BlockDeviceMappings:
+          - DeviceName: "/dev/sda1"
+            Ebs:
+              DeleteOnTermination: true
+              VolumeType: "gp2"
+              VolumeSize: 8
+        IamInstanceProfile:
+          Arn: !GetAtt InstanceProfile.Arn
+        ImageId: !Ref ImageId
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref ProjectName
+        SecurityGroupIds:
+          - !Ref Ec2SecurityGroup
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/sh -x
+
+            apt update -y
+            apt install -y unzip python-pip
+
+            pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz
+            cp -a /usr/local/init/ubuntu/cfn-hup /etc/init.d/cfn-hup
+            chmod u+x /etc/init.d/cfn-hup
+
+            /usr/local/bin/cfn-signal -e $? --stack ${AWS::StackName} --region ${AWS::Region} --resource AutoScalingGroup
+
+            reboot
+
+  # AutoScalingGroup
+  AutoScalingGroup:
+    Type: "AWS::AutoScaling::AutoScalingGroup"
+    CreationPolicy:
+      AutoScalingCreationPolicy:
+        MinSuccessfulInstancesPercent: 50
+      ResourceSignal:
+        Count: !Ref InstanceNum
+        Timeout: "PT5M"
+    UpdatePolicy:
+      AutoScalingReplacingUpdate:
+        WillReplace: True
+    Properties:
+      AvailabilityZones:
+        - !Select [ "0", !GetAZs ""]
+        - !Select [ "1", !GetAZs ""]
+        - !Select [ "2", !GetAZs ""]
+      Cooldown: "60"
+      DesiredCapacity: !Ref InstanceNum
+      HealthCheckGracePeriod: 60
+      HealthCheckType: "EC2"
+      MaxSize: !Ref InstanceNum
+      MetricsCollection:
+        - Granularity: "1Minute"
+      MinSize: !Ref InstanceNum
+      MixedInstancesPolicy:
+        InstancesDistribution:
+          OnDemandPercentageAboveBaseCapacity: 0
+        LaunchTemplate:
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref LaunchTemplate
+            Version: !GetAtt LaunchTemplate.LatestVersionNumber
+          Overrides:
+            - InstanceType: !Ref InstanceType
+            - InstanceType: !Ref InstanceType1
+            - InstanceType: !Ref InstanceType2
+      TargetGroupARNs: !Ref TargetGroup
+      TerminationPolicies:
+        - OldestInstance
+      VPCZoneIdentifier:
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-uno-subnet" }
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-due-subnet" }
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-tri-subnet" }
+      Tags:
+        - Key: Name
+          PropagateAtLaunch: true
+          Value: !Sub "${ProjectName}-${Env}-${Role}-ec2"
+        - Key: Env
+          PropagateAtLaunch: true
+          Value: !Ref Env
+        - Key: Role
+          PropagateAtLaunch: true
+          Value: !Ref Role
+
+  # Classic Load Balancer
+  LoadBalancer:
+    Type: "AWS::ElasticLoadBalancing::LoadBalancer"
+    Properties:
+      AccessLoggingPolicy:
+        EmitInterval: 60
+        Enabled: true
+        S3BucketName: !Sub "${ProjectName}-${Env}-logs"
+        S3BucketPrefix: !Sub "AWSLogs/${AWS::AccountId}/classicloadbalancing"
+      ConnectionSettings:
+        IdleTimeout: 300
+      HealthCheck:
+        HealthyThreshold: 2
+        Interval: 30
+        Target: 
+        Timeout: 5
+        UnhealthyThreshold: 5
+      Listeners:
+        InstancePort: 22
+        InstanceProtocol: "TCP"
+        LoadBalancerPort: 50022
+        Protocol: "TCP"
+      LoadBalancerName: !Sub "${ProjectName}-${Env}-${Role}-pub-clb"
+      Scheme: "internet-facing"
+      SecurityGroups:
+        - !GetAtt ClbSecurityGroup.GroupId
+      Subnets:
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-uno-subnet" }
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-due-subnet" }
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-tri-subnet" }
+      Tags:
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
