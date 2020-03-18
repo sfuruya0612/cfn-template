@@ -45,6 +45,24 @@ Outputs:
     Export:
       Name: !Sub "${ProjectName}-${Env}-vpc-cidr"
 
+  PublicAdmSubnetId1:
+    Value: !Ref SubnetAdmPub1
+    Export:
+      Name: !Sub "${ProjectName}-${Env}-adm-pub-uno-subnet"
+  PublicAdmSubnetId2:
+    Value: !Ref SubnetAdmPub2
+    Export:
+      Name: !Sub "${ProjectName}-${Env}-adm-pub-due-subnet"
+
+  PrivateAdmSubnetId1:
+    Value: !Ref SubnetAdmPri1
+    Export:
+      Name: !Sub "${ProjectName}-${Env}-adm-pri-uno-subnet"
+  PrivateAdmSubnetId2:
+    Value: !Ref SubnetAdmPri2
+    Export:
+      Name: !Sub "${ProjectName}-${Env}-adm-pri-due-subnet"
+
   PublicSubnetId1:
     Value: !Ref SubnetPub1
     Export:
@@ -252,6 +270,11 @@ Resources:
     Type: "AWS::EC2::NetworkAcl"
     Properties:
       VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-acl"
+        - Key: Env
+          Value: !Ref Env
   Acl1:
     Type: "AWS::EC2::NetworkAclEntry"
     Properties:

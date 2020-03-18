@@ -11,7 +11,6 @@ aws cloudformation create-stack \
         ParameterKey=ProjectName,ParameterValue=<YOUR PROJECT NAME> \
         ParameterKey=Env,ParameterValue=<Environment>
 
-
 # Create VPC
 aws cloudformation create-stack \
     --stack-name init-vpc \
@@ -21,6 +20,11 @@ aws cloudformation create-stack \
         ParameterKey=Env,ParameterValue=<Environment> \
         ParameterKey=Segment,ParameterValue=<Network segment> \
         ParameterKey=Logging,ParameterValue=<true or false>
+
+# Deploy VPC
+aws cloudformation deploy \
+    --stack-name init-vpc \
+    --template-file vpc.yml
 
 # Create Route53
 # with region option(us-east-1) for log retrieval

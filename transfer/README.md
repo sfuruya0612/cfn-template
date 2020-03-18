@@ -49,4 +49,10 @@ make delete_server
 USER=hoge make delete_user
 ```
 
+### Connection test
+
+``` bash
+$ sftp -i ${SSH_KEY_PATH} -P 22 ${USER}@${SFTP_DOMAIN_NAME}
+```
+
 ---

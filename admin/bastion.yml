@@ -6,13 +6,13 @@ Description: >
 Parameters:
   ProjectName:
     Type: String
-    Default: default
+    Default: "default"
     Description: "Project(Service) name"
     MaxLength: 10
     MinLength: 2
   Env:
     Type: String
-    Default: dev
+    Default: "dev"
     Description: "Environment"
     AllowedValues:
       - dev
@@ -28,19 +28,23 @@ Parameters:
     Description: "Ubuntu Server 18.04 LTS (HVM), SSD Volume Type"
   InstanceType:
     Type: String
-    Default: t3.nano
+    Default: "t3.nano"
     Description: "Set LaunchTemplate"
   InstanceType1:
     Type: String
-    Default: t3.micro
+    Default: "t3.micro"
     Description: "Set AutoScaling SpotFleet Type"
   InstanceType2:
     Type: String
-    Default: t3.small
+    Default: "t3.small"
     Description: "Set AutoScaling SpotFleet Type"
   InstanceNum:
     Type: String
     Default: 1
+    Description: ""
+  DomainName:
+    Type: String
+    Default: ""
     Description: ""
 
 Resources:
@@ -107,6 +111,8 @@ Resources:
           Value: !Ref Role
 
   # LaunchTemplate
+  # Private Subnetにおきたいが、Natを置いてないのでInternetに接続できない
+  # コストを優先し、Public Subnet配置にする
   LaunchTemplate:
     Type: "AWS::EC2::LaunchTemplate"
     Properties:
@@ -122,6 +128,12 @@ Resources:
         ImageId: !Ref ImageId
         InstanceType: !Ref InstanceType
         KeyName: !Ref ProjectName
+        # NetworkInterfaces:
+        #   - AssociatePublicIpAddress: false
+        #     DeleteOnTermination: true
+        #     DeviceIndex: 0
+        #     Groups:
+        #       - !GetAtt Ec2SecurityGroup.GroupId
         SecurityGroupIds:
           - !Ref Ec2SecurityGroup
         UserData:
@@ -155,11 +167,12 @@ Resources:
       AvailabilityZones:
         - !Select [ "0", !GetAZs ""]
         - !Select [ "1", !GetAZs ""]
-        - !Select [ "2", !GetAZs ""]
       Cooldown: "60"
       DesiredCapacity: !Ref InstanceNum
       HealthCheckGracePeriod: 60
       HealthCheckType: "EC2"
+      LoadBalancerNames:
+        - !Ref LoadBalancer
       MaxSize: !Ref InstanceNum
       MetricsCollection:
         - Granularity: "1Minute"
@@ -175,13 +188,11 @@ Resources:
             - InstanceType: !Ref InstanceType
             - InstanceType: !Ref InstanceType1
             - InstanceType: !Ref InstanceType2
-      TargetGroupARNs: !Ref TargetGroup
       TerminationPolicies:
         - OldestInstance
       VPCZoneIdentifier:
-        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-uno-subnet" }
-        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-due-subnet" }
-        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-tri-subnet" }
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-adm-pub-uno-subnet" }
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-adm-pub-due-subnet" }
       Tags:
         - Key: Name
           PropagateAtLaunch: true
@@ -197,34 +208,40 @@ Resources:
   LoadBalancer:
     Type: "AWS::ElasticLoadBalancing::LoadBalancer"
     Properties:
-      AccessLoggingPolicy:
-        EmitInterval: 60
-        Enabled: true
-        S3BucketName: !Sub "${ProjectName}-${Env}-logs"
-        S3BucketPrefix: !Sub "AWSLogs/${AWS::AccountId}/classicloadbalancing"
       ConnectionSettings:
         IdleTimeout: 300
       HealthCheck:
-        HealthyThreshold: 2
-        Interval: 30
-        Target: 
-        Timeout: 5
-        UnhealthyThreshold: 5
+        HealthyThreshold: "2"
+        Interval: "30"
+        Target: "TCP:22"
+        Timeout: "5"
+        UnhealthyThreshold: "5"
       Listeners:
-        InstancePort: 22
-        InstanceProtocol: "TCP"
-        LoadBalancerPort: 50022
-        Protocol: "TCP"
+        - InstancePort: "22"
+          InstanceProtocol: "TCP"
+          LoadBalancerPort: "50022"
+          Protocol: "TCP"
       LoadBalancerName: !Sub "${ProjectName}-${Env}-${Role}-pub-clb"
       Scheme: "internet-facing"
       SecurityGroups:
-        - !GetAtt ClbSecurityGroup.GroupId
+        - !Ref ClbSecurityGroup
       Subnets:
-        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-uno-subnet" }
-        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-due-subnet" }
-        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-tri-subnet" }
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-adm-pub-uno-subnet" }
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-adm-pub-due-subnet" }
       Tags:
         - Key: Env
           Value: !Ref Env
         - Key: Role
           Value: !Ref Role
+
+  # Set Route53 record
+  SetRecord:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt LoadBalancer.CanonicalHostedZoneName
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneNameID
+      Comment: "for bastion"
+      HostedZoneName: !Sub "${DomainName}."
+      Name: !Sub "bastion.${DomainName}"
+      Type: "A"
