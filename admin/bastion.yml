@@ -62,7 +62,7 @@ Resources:
                 - "ec2.amazonaws.com"
             Action:
               - "sts:AssumeRole"
-      Path: /
+      Path: "/"
       RoleName: !Sub "${ProjectName}-${Env}-${Role}-iam-role"
       ManagedPolicyArns:
         - "arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM"
@@ -73,15 +73,18 @@ Resources:
       Roles:
         - !Ref IamRole
 
-  # SecurityGroup
+  # Security Group
   ClbSecurityGroup:
     Type: "AWS::EC2::SecurityGroup"
     Properties:
-      GroupDescription: "for bastion clb"
+      GroupDescription: !Sub "for ${Role} clb"
       SecurityGroupIngress:
         - IpProtocol: "tcp"
           FromPort: 50022
           ToPort: 50022
+          CidrIp: "0.0.0.0/0"
+      SecurityGroupEgress:
+        - IpProtocol : "-1"
           CidrIp: "0.0.0.0/0"
       VpcId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
       Tags:
@@ -95,12 +98,16 @@ Resources:
   Ec2SecurityGroup:
     Type: "AWS::EC2::SecurityGroup"
     Properties:
-      GroupDescription: "for bastion ec2"
+      GroupDescription: !Sub "for ${Role} ec2"
       SecurityGroupIngress:
         - IpProtocol: "tcp"
           FromPort: 22
           ToPort: 22
           SourceSecurityGroupId: !GetAtt ClbSecurityGroup.GroupId
+          Description: !Sub "from ${Role} alb"
+      SecurityGroupEgress:
+        - IpProtocol : "-1"
+          CidrIp: "0.0.0.0/0"
       VpcId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
       Tags:
         - Key: Name
@@ -189,7 +196,7 @@ Resources:
             - InstanceType: !Ref InstanceType1
             - InstanceType: !Ref InstanceType2
       TerminationPolicies:
-        - OldestInstance
+        - "OldestInstance"
       VPCZoneIdentifier:
         - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-adm-pub-uno-subnet" }
         - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-adm-pub-due-subnet" }
@@ -241,7 +248,7 @@ Resources:
       AliasTarget:
         DNSName: !GetAtt LoadBalancer.CanonicalHostedZoneName
         HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneNameID
-      Comment: "for bastion"
+      Comment: !Sub "for ${Role}"
       HostedZoneName: !Sub "${DomainName}."
-      Name: !Sub "bastion.${DomainName}"
+      Name: !Sub "${Role}.${DomainName}"
       Type: "A"

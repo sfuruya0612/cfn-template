@@ -1,66 +1,41 @@
 ---
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  AWS CloudFormation template for launch zabbix container(Use ECS Fargate).
+  Zabbix ECS on Fargate
 
 Parameters:
-  ProjectName:
+    ProjectName:
     Type: String
-    Default: default
-    MinLength: 2
+    Default: "default"
+    Description: "Project(Service) name"
     MaxLength: 10
-    Description: "Enter project name."
-    ConstraintDescription: "Project name must be greater than 2 and less than 10."
-  VpcId:
-    Type: 'AWS::EC2::VPC::Id'
-    Description: "Select VPC id."
-  VpcCidr:
+    MinLength: 2
+  Env:
     Type: String
-    Description: "Enter VPC cidr block."
-  BastionIp:
+    Default: "dev"
+    Description: "Environment"
+    AllowedValues:
+      - dev
+      - stg
+      - prd
+  Role:
     Type: String
-    Description: "Enter bastion server ip. e.g. 10.xx.0.11"
-  SubnetId1:
-    Type: 'AWS::EC2::Subnet::Id'
-    Description: "Select adm public 1a subnet id."
-  SubnetId2:
-    Type: 'AWS::EC2::Subnet::Id'
-    Description: "Select adm public 1c subnet id."
-  SubnetId3:
-    Type: 'AWS::EC2::Subnet::Id'
-    Description: "Select adm private 1a subnet id."
-  SubnetId4:
-    Type: 'AWS::EC2::Subnet::Id'
-    Description: "Select adm private 1c subnet id."
-  SubnetCidr1:
+    Default: "zbx"
+    Description: ""
+  MasterUsername:
     Type: String
-    Description: "Enter adm public 1a subnet cidr. e.g. 10.xx.yy.zz"
-  SubnetCidr2:
-    Type: String
-    Description: "Enter adm public 1c subnet cidr. e.g. 10.xx.yy.zz"
-  CertificateArn:
-    Type: String
-    Description: "ACM arn."
-  MasterDBUser:
-    Type: String
-    Description: 'Enter DB master user name.'
     Default: zabbixuser
-    MinLength: 4
-    MaxLength: 16
-  MasterDBPassword:
+    Description: "Database default user name"
+  MasterUserPassword:
     Type: String
-    Description: 'Enter DB master user password.'
-    Default: zabbixuser
-    MinLength: 8
-    MaxLength: 16
+    Description: "Database default user password"
     NoEcho: true
 
 Resources:
-  # Create IAM Role
+  # IAM Role
   IamRole:
-    Type: 'AWS::IAM::Role'
+    Type: "AWS::IAM::Role"
     Properties:
-      RoleName: EcsZbxRole
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -71,159 +46,121 @@ Resources:
                 - "ecs-tasks.amazonaws.com"
             Action:
               - "sts:AssumeRole"
-      Path: /
+      Path: "/"
+      RoleName: !Sub "${ProjectName}-${Env}-${Role}-iam-role"
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/ReadOnlyAccess
-  IamPolicy:
-    Type: 'AWS::IAM::Policy'
-    Properties:
-      Roles:
-        - !Ref IamRole
-      PolicyName: EcsZbxPolicy
-      PolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: "Allow"
-            Action:
-              - "ec2:AttachNetworkInterface"
-              - "ec2:CreateNetworkInterface"
-              - "ec2:CreateNetworkInterfacePermission"
-              - "ec2:DeleteNetworkInterface"
-              - "ec2:DeleteNetworkInterfacePermission"
-              - "ec2:Describe*"
-              - "ec2:DetachNetworkInterface"
-              - "elasticloadbalancing:DeregisterInstancesFromLoadBalancer"
-              - "elasticloadbalancing:DeregisterTargets"
-              - "elasticloadbalancing:Describe*"
-              - "elasticloadbalancing:RegisterInstancesWithLoadBalancer"
-              - "elasticloadbalancing:RegisterTargets"
-              - "servicediscovery:DeregisterInstance"
-              - "servicediscovery:Get*"
-              - "servicediscovery:List*"
-              - "servicediscovery:RegisterInstance"
-              - "servicediscovery:UpdateInstanceCustomHealthStatus"
-              - "logs:CreateLogStream"
-              - "logs:PutLogEvents"
-            Resource: "*"
+        - "arn:aws:iam::aws:policy/aws-service-role/AmazonECSServiceRolePolicy"
+        - "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 
   # Security groups
-  SecurityGroupAlb:
-    Type: 'AWS::EC2::SecurityGroup'
+  AlbSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
     Properties:
-      GroupDescription: "Allow incoming HTTPS connections for zabbix."
+      GroupDescription: !Sub "for ${Role} alb"
       SecurityGroupIngress:
-        - IpProtocol: tcp
+        - IpProtocol: "tcp"
           FromPort: 443
           ToPort: 443
-          CidrIp: 0.0.0.0/0
-          Description: "from internet."
+          CidrIp: "0.0.0.0/0"
       SecurityGroupEgress:
-        - IpProtocol : '-1'
-          CidrIp: 0.0.0.0/0
-      VpcId: !Ref VpcId
+        - IpProtocol : "-1"
+          CidrIp: "0.0.0.0/0"
+      VpcId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-adm-zbx-alb-sg"
+          Value: !Sub "${ProjectName}-${Env}-${Role}-alb-sg"
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
 
-  SecurityGroupWeb:
-    Type: 'AWS::EC2::SecurityGroup'
+  WebSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
     Properties:
-      GroupDescription: "Allow incoming HTTP connections for zabbix web."
+      GroupDescription: !Sub "for ${Role} web"
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          SourceSecurityGroupId: !Ref SecurityGroupAlb
-          Description: "from zabbix alb."
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+          Description: !Sub "from ${Role} alb"
       SecurityGroupEgress:
-        - IpProtocol : '-1'
-          CidrIp: 0.0.0.0/0
-      VpcId: !Ref VpcId
+        - IpProtocol : "-1"
+          CidrIp: "0.0.0.0/0"
+      VpcId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-adm-zbx-web-sg"
+          Value: !Sub "${ProjectName}-${Env}-${Role}-web-sg"
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
 
-  SecurityGroupServer:
-    Type: 'AWS::EC2::SecurityGroup'
+  ServerSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
     Properties:
-      GroupDescription: "Allow incoming zabbix server and agent connections for zabbix."
+      GroupDescription: !Sub "for ${Role} server"
       SecurityGroupIngress:
-        - IpProtocol: tcp
+        - IpProtocol: "tcp"
           FromPort: 10051
           ToPort: 10051
-          CidrIp: !Sub "${VpcCidr}/16"
-          Description: !Sub "from ${VpcId} any instances."
-        - IpProtocol: tcp
+          CidrIp: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc-cidr" }
+          Description: !Join
+            - " "
+            - - "from"
+              - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
+              - "any instances"
+        - IpProtocol: "tcp"
           FromPort: 10050
           ToPort: 10050
-          CidrIp: !Sub "${VpcCidr}/16"
-          Description: !Sub "from ${VpcId} any instances."
+          CidrIp: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc-cidr" }
+          Description: !Join
+            - " "
+            - - "from"
+              - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
+              - "any instances"
       SecurityGroupEgress:
-        - IpProtocol : '-1'
-          CidrIp: 0.0.0.0/0
-      VpcId: !Ref VpcId
+        - IpProtocol : "-1"
+          CidrIp: "0.0.0.0/0"
+      VpcId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-adm-zbx-srv-sg"
-
-  SecurityGroupRds:
-    Type: 'AWS::EC2::SecurityGroup'
-    Properties:
-      GroupDescription: "Allow incoming MySQL connections for zabbix DB."
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 3306
-          ToPort: 3306
-          CidrIp: !Sub "${SubnetCidr1}/20"
-          Description: "from adm public subnet 1a."
-        - IpProtocol: tcp
-          FromPort: 3306
-          ToPort: 3306
-          CidrIp: !Sub "${SubnetCidr2}/20"
-          Description: "from adm public subnet 1c."
-        - IpProtocol: tcp
-          FromPort: 3306
-          ToPort: 3306
-          CidrIp: !Sub "${BastionIp}/32"
-          Description: !Sub "from ${ProjectName} bastion server."
-      SecurityGroupEgress:
-        - IpProtocol : '-1'
-          CidrIp: 0.0.0.0/0
-      VpcId: !Ref VpcId
-      Tags:
-        - Key: Name
-          Value: !Sub "${ProjectName}-adm-zbx-rds-sg"
+          Value: !Sub "${ProjectName}-${Env}-${Role}-srv-sg"
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
 
   # Launch ALB
-  TargetGroupAlb:
-    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+  AlbTargetGroup:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
     Properties:
-      Name: !Sub "${ProjectName}-adm-zbx-alb-tg"
-      Protocol: HTTP
+      Name: !Sub "${ProjectName}-${Env}-${Role}-alb-tg"
+      Protocol: "HTTP"
       Port: 80
-      HealthCheckProtocol: HTTP
+      HealthCheckProtocol: "HTTP"
       HealthCheckPort: 80
       HealthCheckPath: "/"
-      TargetType: ip
-      VpcId: !Ref VpcId
+      TargetType: "ip"
+      VpcId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
   Alb:
-    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
     Properties:
-      Name: !Sub "${ProjectName}-adm-pub-zbx-alb"
-      Type: application
-      Scheme: internet-facing
-      IpAddressType: ipv4
+      Name: !Sub "${ProjectName}-${Env}-${Role}-pub-alb"
+      Type: "application"
+      Scheme: "internet-facing"
+      IpAddressType: "ipv4"
       SecurityGroups:
-        - !Ref SecurityGroupAlb
+        - !Ref AlbSecurityGroup
       Subnets:
         - !Ref SubnetId1
         - !Ref SubnetId2
-  ListenerAlb:
-    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+  AlbListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
     Properties:
       DefaultActions:
         - Type: forward
-          TargetGroupArn: !Ref TargetGroupAlb
+          TargetGroupArn: !Ref AlbTargetGroup
       LoadBalancerArn: !Ref Alb
       Protocol: HTTPS
       Port: 443
@@ -232,18 +169,18 @@ Resources:
 
   # Launch NLB
   TargetGroupNlb:
-    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
     Properties:
-      Name: !Sub "${ProjectName}-adm-zbx-nlb-tg"
-      Protocol: TCP
+      Name: !Sub "${ProjectName}-${Env}-${Role}-nlb-tg"
+      Protocol: "TCP"
       Port: 10051
-      HealthCheckProtocol: TCP
+      HealthCheckProtocol: "TCP"
       TargetType: ip
-      VpcId: !Ref VpcId
+      VpcId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
   Nlb:
-    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
     Properties:
-      Name: !Sub "${ProjectName}-adm-pub-zbx-nlb"
+      Name: !Sub "${ProjectName}-${Env}-${Role}-pub-nlb"
       Type: network
       Scheme: internet-facing
       Subnets:
@@ -259,50 +196,6 @@ Resources:
       Protocol: TCP
       Port: 10051
 
-  # Launch RDS
-  SubnetGroup:
-    Type: 'AWS::RDS::DBSubnetGroup'
-    Properties:
-      DBSubnetGroupName: !Sub "${ProjectName}-adm-zbx-rds-subnet"
-      DBSubnetGroupDescription: "for zabbix DB subnet group."
-      SubnetIds:
-        - !Ref SubnetId3
-        - !Ref SubnetId4
-  ParameterGroup:
-    Type: 'AWS::RDS::DBParameterGroup'
-    Properties:
-      Description: "for zabbix DB paramater group."
-      Family: mysql5.7
-  OptionGroup:
-    Type: 'AWS::RDS::OptionGroup'
-    Properties:
-      OptionGroupDescription: "for zabbix DB option group."
-      EngineName: mysql
-      MajorEngineVersion: 5.7
-  DbInstance:
-    Type: 'AWS::RDS::DBInstance'
-    Properties:
-      Engine: MySQL
-      EngineVersion: 5.7.23
-      DBInstanceClass: db.t2.small
-      StorageType: gp2
-      AllocatedStorage: 30
-      DBInstanceIdentifier: !Sub "${ProjectName}-adm-pri-zbx-rds"
-      MasterUsername: !Ref MasterDBUser
-      MasterUserPassword: !Ref MasterDBPassword
-      VPCSecurityGroups:
-        - !Ref SecurityGroupRds
-      DBSubnetGroupName: !Ref SubnetGroup
-      PubliclyAccessible: false
-      DBName: zabbix
-      Port: 3306
-      DBParameterGroupName: !Ref ParameterGroup
-      OptionGroupName: !Ref OptionGroup
-      BackupRetentionPeriod: 3
-      PreferredBackupWindow: '14:30-15:00'
-      AutoMinorVersionUpgrade: false
-      PreferredMaintenanceWindow: 'sat:15:00-sat:15:30'
-
   # Create Cloudwatch log group
   LogGroup:
     Type: 'AWS::Logs::LogGroup'
@@ -312,9 +205,9 @@ Resources:
 
   # Create ECS cluster
   EcsCluster:
-    Type: 'AWS::ECS::Cluster'
+    Type: "AWS::ECS::Cluster"
     Properties:
-      ClusterName: !Sub "${ProjectName}-adm-zbx-ecs-cluster"
+      ClusterName: !Sub "${ProjectName}-${Env}-${Role}-ecs-cluster"
 
   # Create zabbix server task definition
   TaskServer:
@@ -484,9 +377,14 @@ Resources:
             - !Ref SubnetId2
       TaskDefinition: !Ref TaskWeb
 
-Outputs:
-  AlbDnsName:
-    Description: "Export web ALB DNS name."
-    Value: !GetAtt Alb.DNSName
-    Export:
-      Name: zabbix-web-alb
+  # Set Route53 record
+  SetRecord:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt LoadBalancer.CanonicalHostedZoneName
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneNameID
+      Comment: !Sub "for ${Role}"
+      HostedZoneName: !Sub "${DomainName}."
+      Name: !Sub "${Role}.${DomainName}"
+      Type: "A"

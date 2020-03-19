@@ -32,20 +32,24 @@ Parameters:
     NoEcho: true
 
 Resources:
-  # Security Group for serverless aurora
+  # Security Group
   SecurityGroup:
-    Type: 'AWS::EC2::SecurityGroup'
+    Type: "AWS::EC2::SecurityGroup"
     Properties:
-      GroupDescription: "for serverless aurora"
+      GroupDescription: !Sub "for ${Role} rds"
       SecurityGroupIngress:
-        - IpProtocol: tcp
+        - IpProtocol: "tcp"
           FromPort: 3306
           ToPort: 3306
           CidrIp: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc-cidr" }
-          Description: "from vpc"
+          Description: !Join
+            - " "
+            - - "from"
+              - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
+              - "any instances"
       SecurityGroupEgress:
-        - IpProtocol : '-1'
-          CidrIp: 0.0.0.0/0
+        - IpProtocol : "-1"
+          CidrIp: "0.0.0.0/0"
       VpcId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
       Tags:
         - Key: Name
@@ -59,7 +63,7 @@ Resources:
   ClusterParameterGroup:
     Type: "AWS::RDS::DBClusterParameterGroup"
     Properties:
-      Description: "for serverless aurora"
+      Description: !Sub "for ${Role} rds"
       Family: "aurora5.6"
       Parameters:
         character_set_database: "utf8"
@@ -92,7 +96,7 @@ Resources:
     Type: "AWS::RDS::DBSubnetGroup"
     Properties:
       DBSubnetGroupName: !Sub "${ProjectName}-${Env}-${Role}-subnet"
-      DBSubnetGroupDescription: "for serverless aurora"
+      DBSubnetGroupDescription: !Sub "for ${Role} rds"
       SubnetIds:
         - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pri-uno-subnet" }
         - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pri-due-subnet" }
