@@ -1,7 +1,7 @@
 ---
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  Bastion EC2
+  AutoScaling EC2
 
 Parameters:
   ProjectName:
@@ -20,7 +20,7 @@ Parameters:
       - prd
   Role:
     Type: String
-    Default: "bastion"
+    Default: "app"
     Description: ""
   ImageId:
     Type: "AWS::EC2::Image::Id"
@@ -74,14 +74,14 @@ Resources:
         - !Ref IamRole
 
   # Security Group
-  ClbSecurityGroup:
+  AlbSecurityGroup:
     Type: "AWS::EC2::SecurityGroup"
     Properties:
-      GroupDescription: !Sub "for ${Role} clb"
+      GroupDescription: !Sub "for ${Role} alb"
       SecurityGroupIngress:
         - IpProtocol: "tcp"
-          FromPort: 50022
-          ToPort: 50022
+          FromPort: 443
+          ToPort: 443
           CidrIp: "0.0.0.0/0"
       SecurityGroupEgress:
         - IpProtocol : "-1"
@@ -89,7 +89,7 @@ Resources:
       VpcId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-${Env}-${Role}-clb-sg"
+          Value: !Sub "${ProjectName}-${Env}-${Role}-alb-sg"
         - Key: Env
           Value: !Ref Env
         - Key: Role
@@ -101,10 +101,10 @@ Resources:
       GroupDescription: !Sub "for ${Role} ec2"
       SecurityGroupIngress:
         - IpProtocol: "tcp"
-          FromPort: 22
-          ToPort: 22
-          SourceSecurityGroupId: !GetAtt ClbSecurityGroup.GroupId
-          Description: !Sub "from ${Role} clb"
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+          Description: !Sub "from ${Role} alb"
       SecurityGroupEgress:
         - IpProtocol : "-1"
           CidrIp: "0.0.0.0/0"
@@ -174,12 +174,11 @@ Resources:
       AvailabilityZones:
         - !Select [ "0", !GetAZs ""]
         - !Select [ "1", !GetAZs ""]
+        - !Select [ "2", !GetAZs ""]
       Cooldown: "60"
       DesiredCapacity: !Ref InstanceNum
       HealthCheckGracePeriod: 60
       HealthCheckType: "EC2"
-      LoadBalancerNames:
-        - !Ref LoadBalancer
       MaxSize: !Ref InstanceNum
       MetricsCollection:
         - Granularity: "1Minute"
@@ -195,11 +194,14 @@ Resources:
             - InstanceType: !Ref InstanceType
             - InstanceType: !Ref InstanceType1
             - InstanceType: !Ref InstanceType2
+      TargetGroupARNs:
+        - !Ref TargetGroup
       TerminationPolicies:
         - "OldestInstance"
       VPCZoneIdentifier:
-        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-adm-pub-uno-subnet" }
-        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-adm-pub-due-subnet" }
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-uno-subnet" }
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-due-subnet" }
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-tri-subnet" }
       Tags:
         - Key: Name
           PropagateAtLaunch: true
@@ -211,30 +213,59 @@ Resources:
           PropagateAtLaunch: true
           Value: !Ref Role
 
-  # Classic Load Balancer
-  LoadBalancer:
-    Type: "AWS::ElasticLoadBalancing::LoadBalancer"
+  # Target Group
+  TargetGroup:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
     Properties:
-      ConnectionSettings:
-        IdleTimeout: 300
-      HealthCheck:
-        HealthyThreshold: "2"
-        Interval: "30"
-        Target: "TCP:22"
-        Timeout: "5"
-        UnhealthyThreshold: "5"
-      Listeners:
-        - InstancePort: "22"
-          InstanceProtocol: "TCP"
-          LoadBalancerPort: "50022"
-          Protocol: "TCP"
-      LoadBalancerName: !Sub "${ProjectName}-${Env}-${Role}-pub-clb"
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: "/"
+      HealthCheckPort: "80"
+      HealthCheckProtocol: "HTTP"
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      Name: !Sub "${ProjectName}-${Env}-${Role}-tg"
+      Port: 80
+      Protocol: "HTTP"
+      TargetType: "instance"
+      UnhealthyThresholdCount: 5
+      VpcId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
+      Tags:
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
+
+  # Listener
+  Listener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      Certificates:
+        - CertificateArn: { "Fn::ImportValue": !Sub "${ProjectName}-certificate-arn" }
+      DefaultActions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: "forward"
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 443
+      Protocol: "HTTPS"
+
+  # Application Load Balancer
+  LoadBalancer:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      IpAddressType: "ipv4"
+      LoadBalancerAttributes:
+        - Key: access_logs.s3.enabled
+          Value: "true"
+        - Key: access_logs.s3.bucket
+          Value: !Sub "${ProjectName}-${Env}-logs"
+      Name: !Sub "${ProjectName}-${Env}-${Role}-pub-alb"
       Scheme: "internet-facing"
       SecurityGroups:
-        - !Ref ClbSecurityGroup
+        - !Ref AlbSecurityGroup
       Subnets:
-        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-adm-pub-uno-subnet" }
-        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-adm-pub-due-subnet" }
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-uno-subnet" }
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-due-subnet" }
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-tri-subnet" }
       Tags:
         - Key: Env
           Value: !Ref Env
@@ -246,8 +277,8 @@ Resources:
     Type: "AWS::Route53::RecordSet"
     Properties:
       AliasTarget:
-        DNSName: !GetAtt LoadBalancer.CanonicalHostedZoneName
-        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneNameID
+        DNSName: !GetAtt LoadBalancer.DNSName
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
       Comment: !Sub "for ${Role}"
       HostedZoneName: !Sub "${DomainName}."
       Name: !Sub "${Role}.${DomainName}"
