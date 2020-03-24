@@ -30,6 +30,10 @@ Parameters:
     Type: String
     Description: "Database default user password"
     NoEcho: true
+  DomainName:
+    Type: String
+    Default: ""
+    Description: ""
 
 Resources:
   # Security Group
@@ -75,22 +79,6 @@ Resources:
         - Key: Role
           Value: !Ref Role
 
-  # Instance Parameter Group
-  # ParameterGroup:
-  #   Type: "AWS::RDS::DBParameterGroup"
-  #   Properties:
-  #     Description: "for serverless aurora"
-  #     Family: "aurora5.6"
-  #     Parameters:
-  #       character_set_database: "utf8"
-  #     Tags:
-  #       - Key: Name
-  #         Value: !Sub "${ProjectName}-${Env}-${Role}-param-instance"
-  #       - Key: Env
-  #         Value: !Ref Env
-  #       - Key: Role
-  #         Value: !Ref Role
-
   # Subnet Group
   SubnetGroup:
     Type: "AWS::RDS::DBSubnetGroup"
@@ -133,13 +121,14 @@ Resources:
         - Key: Role
           Value: !Ref Role
 
-  # Serverless Aurora DB Instance
-  # DbInstance1:
-  #   Type: "AWS::RDS::DBInstance"
-  #   Properties:
-  #     AutoMinorVersionUpgrade: false
-  #     DBClusterIdentifier: !Ref DbCuster
-  #     DBParameterGroupName: !Ref ParameterGroup
-  #     DBSecurityGroups:
-  #       - !Ref SecurityGroup
-  #     DBSubnetGroupName: !Ref SubnetGroup
+  # Set Route53 record
+  SetRecord:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      Comment: !Sub "for ${Role}"
+      HostedZoneName: !Sub "${DomainName}."
+      Name: !Sub "${Role}-db.${DomainName}"
+      ResourceRecords:
+        - !GetAtt DbCuster.Endpoint.Address
+      TTL: 60
+      Type: "CNAME"

@@ -8,5 +8,6 @@ aws cloudformation create-stack \
     --parameters \
         ParameterKey=ProjectName,ParameterValue=<YOUR PROJECT NAME> \
         ParameterKey=Env,ParameterValue=dev \
-        ParameterKey=MasterUserPassword,ParameterValue=Admin2020
+        ParameterKey=MasterUserPassword,ParameterValue=Admin2020 \
+        ParameterKey=DomainName,ParameterValue=<YOUR DOMAIN>
 ```
