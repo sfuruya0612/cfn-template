@@ -3,18 +3,11 @@
 ## Launch zabbix
 ``` sh
 aws cloudformation create-stack \
-  --stack-name ph-zabbix \
-  --template-body file://launch_zbx_cfn_template.yml \
-  --parameters ParameterKey=ProjectName,PrameterValue= \
-               ParameterKey=VpcId,PrameterValue= \
-               ParameterKey=VpcCidr,PrameterValue= \
-               ParameterKey=SubnetId1,PrameterValue= \
-               ParameterKey=SubnetId2,PrameterValue= \
-               ParameterKey=SubnetId3,PrameterValue= \
-               ParameterKey=SubnetId4,PrameterValue= \
-               ParameterKey=SubnetCidr1,PrameterValue= \
-               ParameterKey=SubnetCidr2,PrameterValue= \
-               ParameterKey=CertifiateArn,PrameterValue= \
-               ParameterKey=MasterDBUser,PrameterValue= \
-               ParameterKey=MasterDBPassword,PrameterValue=
+  --stack-name admin-zbx \
+  --template-body file://ecs-fargate.yml \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameters ParameterKey=ProjectName,ParameterValue=<YOUR PROJECT NAME> \
+               ParameterKey=MasterUserName,ParameterValue=admin \
+               ParameterKey=MasterUserPassword,ParameterValue=Admin2020 \
+               ParameterKey=DomainName,ParameterValue=<YOUR DOMAIN>
 ```

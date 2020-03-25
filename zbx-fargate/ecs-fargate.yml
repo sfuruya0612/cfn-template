@@ -4,7 +4,7 @@ Description: >
   Zabbix ECS on Fargate
 
 Parameters:
-    ProjectName:
+  ProjectName:
     Type: String
     Default: "default"
     Description: "Project(Service) name"
@@ -22,14 +22,19 @@ Parameters:
     Type: String
     Default: "zbx"
     Description: ""
-  MasterUsername:
+  MasterUserName:
     Type: String
-    Default: zabbixuser
+    Default: "admin"
     Description: "Database default user name"
   MasterUserPassword:
     Type: String
+    Default: ""
     Description: "Database default user password"
     NoEcho: true
+  DomainName:
+    Type: String
+    Default: ""
+    Description: ""
 
 Resources:
   # IAM Role
@@ -39,18 +44,24 @@ Resources:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
-          - Effect: "Allow"
+          -
+            Effect: "Allow"
             Principal:
               Service:
                 - "ecs.amazonaws.com"
                 - "ecs-tasks.amazonaws.com"
             Action:
               - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonECS_FullAccess"
+        - "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
       Path: "/"
       RoleName: !Sub "${ProjectName}-${Env}-${Role}-iam-role"
-      ManagedPolicyArns:
-        - "arn:aws:iam::aws:policy/aws-service-role/AmazonECSServiceRolePolicy"
-        - "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+      Tags:
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
 
   # Security groups
   AlbSecurityGroup:
@@ -139,7 +150,7 @@ Resources:
       Protocol: "HTTP"
       Port: 80
       HealthCheckProtocol: "HTTP"
-      HealthCheckPort: 80
+      HealthCheckPort: "80"
       HealthCheckPath: "/"
       TargetType: "ip"
       VpcId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
@@ -214,8 +225,8 @@ Resources:
     Properties:
       ClusterName: !Sub "${ProjectName}-${Env}-${Role}-ecs-cluster"
       ClusterSettings:
-        Name: "containerInsights"
-        Value: "enabled"
+        - Name: "containerInsights"
+          Value: "enabled"
       Tags:
         - Key: Env
           Value: !Ref Env
@@ -226,8 +237,8 @@ Resources:
   SrvTask:
     Type: "AWS::ECS::TaskDefinition"
     Properties:
-      Cpu: 512
-      Memory: 1024
+      Cpu: "512"
+      Memory: "1024"
       ExecutionRoleArn: !GetAtt IamRole.Arn
       Family: !Sub "${Role}-server"
       NetworkMode: "awsvpc"
@@ -249,17 +260,21 @@ Resources:
               ContainerPort: 10051
           Environment:
             - Name: DB_SERVER_HOST
-              Value: !GetAtt DbInstance.Endpoint.Address
+              Value: !Join
+                - ""
+                - - !Ref Role
+                  - "-db."
+                  - !Ref DomainName
             - Name: DB_SERVER_PORT
-              Value: 3306
+              Value: "3306"
             - Name: MYSQL_DATABASE
               Value: "zabbix"
             - Name: MYSQL_USER
-              Value: !Ref MasterDBUser
+              Value: !Ref MasterUserName
             - Name: MYSQL_PASSWORD
-              Value: !Ref MasterDBPassword
+              Value: !Ref MasterUserPassword
             - Name: ZBX_DEBUGLEVEL
-              Value: 3
+              Value: "3"
         - Name: !Sub "${Role}-agent"
           Image: "zabbix/zabbix-agent:alpine-trunk"
           LogConfiguration:
@@ -302,8 +317,8 @@ Resources:
   WebTask:
     Type: "AWS::ECS::TaskDefinition"
     Properties:
-      Cpu: 256
-      Memory: 512
+      Cpu: "256"
+      Memory: "512"
       ExecutionRoleArn: !GetAtt IamRole.Arn
       Family: !Sub "${Role}-web"
       NetworkMode: "awsvpc"
@@ -325,15 +340,19 @@ Resources:
               ContainerPort: 80
           Environment:
             - Name: DB_SERVER_HOST
-              Value: !GetAtt DbInstance.Endpoint.Address
+              Value: !Join
+                - ""
+                - - !Ref Role
+                  - "-db."
+                  - !Ref DomainName
             - Name: DB_SERVER_PORT
-              Value: 3306
+              Value: "3306"
             - Name: MYSQL_DATABASE
               Value: "zabbix"
             - Name: MYSQL_USER
-              Value: !Ref MasterDBUser
+              Value: !Ref MasterUserName
             - Name: MYSQL_PASSWORD
-              Value: !Ref MasterDBPassword
+              Value: !Ref MasterUserPassword
             - Name: PHP_TZ
               Value: Asia/Tokyo
             - Name: ZBX_SERVER_HOST
@@ -341,11 +360,12 @@ Resources:
             - Name: ZBX_SERVER_NAME
               Value: !Sub "${Role}-server-mysql"
             - Name: ZBX_SERVER_PORT
-              Value: 10051
+              Value: "10051"
 
   # Service
   SrvService:
     Type: "AWS::ECS::Service"
+    DependsOn: NlbListener
     Properties:
       Cluster: !Ref EcsCluster
       ServiceName: !Sub "${Role}-server-mysql"
@@ -368,6 +388,7 @@ Resources:
 
   WebService:
     Type: "AWS::ECS::Service"
+    DependsOn: AlbListener
     Properties:
       Cluster: !Ref EcsCluster
       ServiceName: !Sub "${Role}-web-nginx-mysql"
@@ -389,13 +410,24 @@ Resources:
       TaskDefinition: !Ref WebTask
 
   # Set Route53 record
-  SetRecord:
+  AlbSetRecord:
     Type: "AWS::Route53::RecordSet"
     Properties:
       AliasTarget:
-        DNSName: !GetAtt Alb.CanonicalHostedZoneName
-        HostedZoneId: !GetAtt Alb.CanonicalHostedZoneNameID
+        DNSName: !GetAtt Alb.DNSName
+        HostedZoneId: !GetAtt Alb.CanonicalHostedZoneID
       Comment: !Sub "for ${Role}"
       HostedZoneName: !Sub "${DomainName}."
-      Name: !Sub "${Role}.${DomainName}"
+      Name: !Sub "${Role}-web.${DomainName}"
+      Type: "A"
+
+  NlbSetRecord:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt Nlb.DNSName
+        HostedZoneId: !GetAtt Nlb.CanonicalHostedZoneID
+      Comment: !Sub "for ${Role}"
+      HostedZoneName: !Sub "${DomainName}."
+      Name: !Sub "${Role}-srv.${DomainName}"
       Type: "A"

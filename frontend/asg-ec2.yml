@@ -62,10 +62,15 @@ Resources:
                 - "ec2.amazonaws.com"
             Action:
               - "sts:AssumeRole"
-      Path: "/"
-      RoleName: !Sub "${ProjectName}-${Env}-${Role}-iam-role"
       ManagedPolicyArns:
         - "arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM"
+      Path: "/"
+      RoleName: !Sub "${ProjectName}-${Env}-${Role}-iam-role"
+      Tags:
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
   InstanceProfile:
     Type: "AWS::IAM::InstanceProfile"
     Properties:
