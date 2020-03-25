@@ -6,18 +6,18 @@ Description: >
 Parameters:
   ProjectName:
     Type: String
-    Default: default
+    Default: "default"
     Description: "Project(Service) name"
     MaxLength: 10
     MinLength: 2
   Env:
     Type: String
-    Default: dev
+    Default: "dev"
     Description: "Environment"
     AllowedValues:
-      - dev
-      - stg
-      - prd
+      - "dev"
+      - "stg"
+      - "prd"
   Role:
     Type: String
     Default: "app"
@@ -34,6 +34,16 @@ Parameters:
     Type: String
     Default: ""
     Description: ""
+  AdmFlag:
+    Type: String
+    Default: "false"
+    Description: "Launch adm subnet flag (default: false)"
+    AllowedValues:
+      - "true"
+      - "false"
+
+Conditions:
+  IsAdmSubnet: !Equals [ !Ref AdmFlag, "true"]
 
 Resources:
   # Security Group
@@ -85,19 +95,29 @@ Resources:
     Properties:
       DBSubnetGroupName: !Sub "${ProjectName}-${Env}-${Role}-subnet"
       DBSubnetGroupDescription: !Sub "for ${Role} rds"
-      SubnetIds:
-        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pri-uno-subnet" }
-        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pri-due-subnet" }
-        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pri-tri-subnet" }
+      SubnetIds: !If
+        - IsAdmSubnet
+        -
+          - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-adm-pri-uno-subnet" }
+          - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-adm-pri-due-subnet" }
+        -
+          - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pri-uno-subnet" }
+          - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pri-due-subnet" }
+          - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pri-tri-subnet" }
 
   # Severless Aurora DB Cluster
   DbCuster:
     Type: "AWS::RDS::DBCluster"
     Properties:
-      AvailabilityZones:
-        - !Select [ "0", !GetAZs ""]
-        - !Select [ "1", !GetAZs ""]
-        - !Select [ "2", !GetAZs ""]
+      AvailabilityZones: !If
+        - IsAdmSubnet
+        -
+          - !Select [ "0", !GetAZs ""]
+          - !Select [ "1", !GetAZs ""]
+        -
+          - !Select [ "0", !GetAZs ""]
+          - !Select [ "1", !GetAZs ""]
+          - !Select [ "2", !GetAZs ""]
       BackupRetentionPeriod: 3
       DBClusterParameterGroupName: !Ref ClusterParameterGroup
       DBSubnetGroupName: !Ref SubnetGroup
@@ -130,5 +150,5 @@ Resources:
       Name: !Sub "${Role}-db.${DomainName}"
       ResourceRecords:
         - !GetAtt DbCuster.Endpoint.Address
-      TTL: 60
+      TTL: "60"
       Type: "CNAME"

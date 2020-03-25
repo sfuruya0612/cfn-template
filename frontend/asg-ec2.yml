@@ -15,9 +15,9 @@ Parameters:
     Default: "dev"
     Description: "Environment"
     AllowedValues:
-      - dev
-      - stg
-      - prd
+      - "dev"
+      - "stg"
+      - "prd"
   Role:
     Type: String
     Default: "app"

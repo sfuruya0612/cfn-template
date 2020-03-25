@@ -12,12 +12,12 @@ Parameters:
     MinLength: 2
   Env:
     Type: String
-    Default: dev
+    Default: "dev"
     Description: "Environment"
     AllowedValues:
-      - dev
-      - stg
-      - prd
+      - "dev"
+      - "stg"
+      - "prd"
   Segment:
     Type: Number
     Default: 10
@@ -26,14 +26,14 @@ Parameters:
     MinValue: 0
   Logging:
     Type: String
-    Default: false
-    Description: "(Option) VPC flow log to S3"
+    Default: "false"
+    Description: "VPC flow log to S3"
     AllowedValues:
-      - true
-      - false
+      - "true"
+      - "false"
 
 Conditions:
-  Logging: !Equals [ !Ref Logging, "true" ]
+  IsLogging: !Equals [ !Ref Logging, "true" ]
 
 Outputs:
   VpcId:
@@ -106,8 +106,8 @@ Resources:
 
   # VPC Flow log
   FlowLog:
-    Type: AWS::EC2::FlowLog
-    Condition: Logging
+    Type: "AWS::EC2::FlowLog"
+    Condition: IsLogging
     Properties:
       LogDestination : !Sub "arn:aws:s3:::${ProjectName}-${Env}-logs"
       LogDestinationType : s3
