@@ -1,0 +1,135 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ElasticSearch
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: "default"
+    Description: "Project(Service) name"
+    MaxLength: 10
+    MinLength: 2
+  Env:
+    Type: String
+    Default: "dev"
+    Description: "Environment"
+    AllowedValues:
+      - "dev"
+      - "stg"
+      - "prd"
+  Role:
+    Type: String
+    Default: "app"
+    Description: ""
+  Version:
+    Type: String
+    Default: "7.4"
+    Description: "Elasticsearch version"
+    AllowedValues:
+      - "7.4"
+      - "7.1"
+      - "6.8"
+  InstanceCount:
+    Type: Number
+    Default: 1
+    Description: "Elasticsearch node count (required: > 1)"
+    MinValue: 1
+  InstanceType:
+    Type: String
+    Default: "t2.small.elasticsearch"
+    Description: "Elasticsearch node type"
+  DomainName:
+    Type: String
+    Default: ""
+    Description: ""
+  PrivateFlag:
+    Type: String
+    Default: "true"
+    Description: "Launch VPC or Internet flag. (default: Internet)"
+    AllowedValues:
+      - "true"
+      - "false"
+
+Conditions:
+  IsSingleZone: !Equals [ !Ref InstanceCount, 1 ]
+  IsPrivate: !Equals [ !Ref PrivateFlag, "true" ]
+
+Resources:
+  # Security Group
+  # SecurityGroup:
+  #   Type: "AWS::EC2::SecurityGroup"
+  #   Condition: IsPrivate
+  #   Properties:
+  #     GroupDescription: !Sub "for ${Role} es"
+  #     SecurityGroupIngress:
+  #       - IpProtocol: "tcp"
+  #         FromPort: "443"
+  #         ToPort: "443"
+  #         CidrIp: "0.0.0.0/0"
+  #     SecurityGroupEgress:
+  #       - IpProtocol : "-1"
+  #         CidrIp: "0.0.0.0/0"
+  #     VpcId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
+  #     Tags:
+  #       - Key: Name
+  #         Value: !Sub "${ProjectName}-${Env}-${Role}-es-sg"
+  #       - Key: Env
+  #         Value: !Ref Env
+  #       - Key: Role
+  #         Value: !Ref Role
+
+  # ElasticSearch Domain
+  Domain:
+    Type: "AWS::Elasticsearch::Domain"
+    Properties:
+      AccessPolicies:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              AWS: "*"
+            Action: "es:*"
+            Resource: !Sub "arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/${ProjectName}-${Env}-${Role}-es/*"
+      DomainName: !Sub "${ProjectName}-${Env}-${Role}-es"
+      EBSOptions:
+        EBSEnabled: true
+        Iops: 0
+        VolumeSize: 30
+        VolumeType: "gp2"
+      ElasticsearchClusterConfig:
+        InstanceCount: !Ref InstanceCount
+        InstanceType: !Ref InstanceType
+        ZoneAwarenessEnabled: !If
+          - IsSingleZone
+          - false
+          - true
+      ElasticsearchVersion: !Ref Version
+      SnapshotOptions:
+        AutomatedSnapshotStartHour: 15
+      # VPCOptions: !If
+      #   - IsGlobal
+      #   - !Ref AWS::NoValue
+      #   -
+      #     SecurityGroupIds:
+      #       - !Ref SecurityGroup
+      #     SubnetIds:
+      #       - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-adm-pri-uno-subnet" }
+      #       - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-adm-pri-due-subnet" }
+      Tags:
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
+
+  # PrivateSetRecord:
+  #   Type: "AWS::Route53::RecordSet"
+  #   Conditions: IsPrivate
+  #   Properties:
+  #     AliasTarget:
+  #       DNSName: !GetAtt LoadBalancer.DNSName
+  #       HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
+  #     Comment: !Sub "for ${Role}"
+  #     HostedZoneName: !Sub "${DomainName}."
+  #     Name: !Sub "${Role}.${DomainName}"
+  #     Type: "A"
