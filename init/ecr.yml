@@ -1,0 +1,38 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ECR
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: "default"
+    Description: "Project(Service) name"
+    MaxLength: 10
+    MinLength: 2
+  Env:
+    Type: String
+    Default: "dev"
+    Description: ""
+    AllowedValues:
+      - dev
+      - stg
+      - prd
+  Role:
+    Type: String
+    Default: ""
+    Description: ""
+
+Resources:
+  # ECR
+  Repository:
+    Type: "AWS::ECR::Repository"
+    Properties:
+      RepositoryName: !Sub "${ProjectName}-${Role}/${Env}"
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-${Role}-ecr"
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
