@@ -65,6 +65,20 @@ Resources:
       ManagedPolicyArns:
         - "arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM"
       Path: "/"
+      Policies:
+        -
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                  - "logs:DescribeLogStreams"
+                Resource: "*"
+          PolicyName: !Sub "${ProjectName}-${Env}-${Role}-iam-policy"
       RoleName: !Sub "${ProjectName}-${Env}-${Role}-iam-role"
       Tags:
         - Key: Env
@@ -158,6 +172,9 @@ Resources:
             pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz
             cp -a /usr/local/init/ubuntu/cfn-hup /etc/init.d/cfn-hup
             chmod u+x /etc/init.d/cfn-hup
+
+            curl -o /root/amazon-cloudwatch-agent.deb https://s3.amazonaws.com/amazoncloudwatch-agent/debian/amd64/latest/amazon-cloudwatch-agent.deb
+            dpkg -i -E /root/amazon-cloudwatch-agent.deb
 
             /usr/local/bin/cfn-signal -e $? --stack ${AWS::StackName} --region ${AWS::Region} --resource AutoScalingGroup
 
