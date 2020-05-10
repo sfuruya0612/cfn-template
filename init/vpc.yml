@@ -6,31 +6,29 @@ Description: >
 Parameters:
   ProjectName:
     Type: String
-    Default: default
+    Default: "default"
     Description: "Project(Service) name"
-    MaxLength: 10
-    MinLength: 2
   Env:
     Type: String
     Default: "dev"
     Description: "Environment"
-    AllowedValues:
-      - "dev"
-      - "stg"
-      - "prd"
   Segment:
     Type: Number
-    Default: 10
+    Default: 0
     Description: "Range of the second octet(e.g. 10.XX.0.0/16)"
     MaxValue: 255
     MinValue: 0
   Logging:
     Type: String
     Default: "false"
-    Description: "VPC flow log to S3"
+    Description: "VPC flow log to Cloudwatch Logs"
     AllowedValues:
       - "true"
       - "false"
+  RetentionInDays:
+    Type: Number
+    Default: 7
+    Description: "Log Retention Period (Enabled when the Logging parameter is true)"
 
 Conditions:
   IsLogging: !Equals [ !Ref Logging, "true" ]
@@ -104,14 +102,59 @@ Resources:
         - Key: Env
           Value: !Ref Env
 
+  # Iam Role
+  IamRole:
+    Type: "AWS::IAM::Role"
+    Condition: IsLogging
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        -
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:DescribeLogGroup"
+                  - "logs:DescribeLogStreams"
+                  - "logs:PutLogEvents"
+                Resource: "*"
+          PolicyName: "flowlogsPolicy"
+      RoleName: "flowlogsRole"
+      Tags:
+        - Key: Env
+          Value: !Ref Env
+
+  # CloudWatch LogGroup
+  LogGroup:
+    Type: "AWS::Logs::LogGroup"
+    Condition: IsLogging
+    Properties:
+      LogGroupName: !Sub "/aws/vpcflowlog/${Vpc}"
+      RetentionInDays: !Ref RetentionInDays
+
   # VPC Flow log
   FlowLog:
     Type: "AWS::EC2::FlowLog"
     Condition: IsLogging
     Properties:
-      LogDestination : !Sub "arn:aws:s3:::${ProjectName}-${Env}-logs"
-      LogDestinationType : s3
-      ResourceId : !Ref Vpc
+      DeliverLogsPermissionArn: !GetAtt IamRole.Arn
+      LogDestinationType: "cloud-watch-logs"
+      LogGroupName: !Ref LogGroup
+      ResourceId: !Ref Vpc
       ResourceType : VPC
       TrafficType : ALL
 

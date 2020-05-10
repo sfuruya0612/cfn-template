@@ -8,16 +8,10 @@ Parameters:
     Type: String
     Default: "default"
     Description: "Project(Service) name"
-    MaxLength: 10
-    MinLength: 2
   Env:
     Type: String
     Default: "dev"
-    Description: ""
-    AllowedValues:
-      - dev
-      - stg
-      - prd
+    Description: "Environment"
   Role:
     Type: String
     Default: ""
@@ -28,7 +22,7 @@ Resources:
   Repository:
     Type: "AWS::ECR::Repository"
     Properties:
-      RepositoryName: !Sub "${ProjectName}-${Role}/${Env}"
+      RepositoryName: !Sub "${ProjectName}-${Env}/${Role}"
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-${Role}-ecr"

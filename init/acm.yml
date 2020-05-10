@@ -6,10 +6,8 @@ Description: >
 Parameters:
   ProjectName:
     Type: String
-    Default: default
+    Default: "default"
     Description: "Project(Service) name"
-    MaxLength: 10
-    MinLength: 2
   DomainName:
     Type: String
     Description: ""

@@ -8,67 +8,62 @@ Parameters:
     Type: String
     Default: "default"
     Description: "Project(Service) name"
-    MaxLength: 10
-    MinLength: 2
   Env:
     Type: String
     Default: "dev"
     Description: "Environment"
+  Role:
+    Type: String
+    Default: ""
+    Description: ""
+  Logging:
+    Type: String
+    Default: "false"
+    Description: "ALB Logging option"
     AllowedValues:
-      - "dev"
-      - "stg"
-      - "prd"
+      - "true"
+      - "false"
+  ExpirationInDays:
+    Type: Number
+    Default: 7
+    Description: "Log Retention Period (Enabled when the Logging parameter is true)"
+
+Conditions:
+  IsLogging: !Equals [ !Ref Logging, "true" ]
 
 Resources:
   # S3 Buckets
-  # for any logs
-  LogBucket:
+  Bucket:
     Type: "AWS::S3::Bucket"
     Properties:
-      BucketName: !Sub "${ProjectName}-${Env}-logs"
+      BucketName: !Sub "${ProjectName}-${Env}-${Role}"
       LifecycleConfiguration:
-        Rules:
-          - ExpirationInDays: 30
-            Status: "Enabled"
+        Rules: !If
+          - IsLogging
+          -
+            - ExpirationInDays: !Ref ExpirationInDays
+              Status: "Enabled"
+          - !Ref AWS::NoValue
       Tags:
         - Key: ProjectName
           Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
 
   BucketPolicy:
     Type: "AWS::S3::BucketPolicy"
+    Condition: IsLogging
     Properties:
-      Bucket: !Ref LogBucket
+      Bucket: !Ref Bucket
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
-          - Sid: "ALBLogBucketPolicy"
+          - Sid: "LogBucketPolicy"
             Effect: "Allow"
             Principal:
               AWS:
                 - "582318560864"
             Action: "s3:PutObject"
-            Resource: !Sub "arn:aws:s3:::${LogBucket}/AWSLogs/${AWS::AccountId}/*"
-
-  # for application codes
-  DeployBucket:
-    Type: "AWS::S3::Bucket"
-    Properties:
-      BucketName: !Sub "${ProjectName}-${Env}-deploy"
-      Tags:
-        - Key: ProjectName
-          Value: !Ref ProjectName
-        - Key: Env
-          Value: !Ref Env
-
-  # for SAM packages
-  SamBucket:
-    Type: "AWS::S3::Bucket"
-    Properties:
-      BucketName: !Sub "${ProjectName}-${Env}-sam"
-      Tags:
-        - Key: ProjectName
-          Value: !Ref ProjectName
-        - Key: Env
-          Value: !Ref Env
+            Resource: !Sub "arn:aws:s3:::${Bucket}/AWSLogs/${AWS::AccountId}/*"

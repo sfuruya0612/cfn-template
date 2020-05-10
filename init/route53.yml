@@ -8,18 +8,20 @@ Parameters:
     Type: String
     Default: "default"
     Description: "Project(Service) name"
-    MaxLength: 10
-    MinLength: 2
   DomainName:
     Type: String
     Description: ""
   Logging:
     Type: String
     Default: "false"
-    Description: "Query log to CloudWatch Logs"
+    Description: "Query log to Cloudwatch Logs"
     AllowedValues:
       - "true"
       - "false"
+  RetentionInDays:
+    Type: Number
+    Default: 7
+    Description: "Log Retention Period (Enabled when the Logging parameter is true)"
 
 Conditions:
   IsLogging: !Equals [ !Ref Logging, "true" ]
@@ -46,6 +48,7 @@ Resources:
   # CloudWatch LogGroup
   LogGroup:
     Type: "AWS::Logs::LogGroup"
+    Condition: IsLogging
     Properties:
       LogGroupName: !Sub "/aws/route53/${DomainName}"
-      RetentionInDays: 30
+      RetentionInDays: !Ref RetentionInDays
