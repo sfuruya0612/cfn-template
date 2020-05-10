@@ -8,16 +8,10 @@ Parameters:
     Type: String
     Default: "default"
     Description: "Project(Service) name"
-    MaxLength: 10
-    MinLength: 2
   Env:
     Type: String
     Default: "dev"
     Description: "Environment"
-    AllowedValues:
-      - "dev"
-      - "stg"
-      - "prd"
   Role:
     Type: String
     Default: "app"
@@ -141,8 +135,33 @@ Resources:
         - Key: Role
           Value: !Ref Role
 
+  # Parameter Store
+  MasterUsernameParameter:
+    Type: "AWS::SSM::Parameter"
+    Properties:
+      Description: "MasterUsername"
+      Name: !Sub "${ProjectName}-${Env}-${Role}-MasterUsername"
+      Tier: "Standard"
+      Type: "String"
+      Value: !Ref MasterUsername
+      Tags:
+        "Env": !Ref Env
+        "Role": !Ref Role
+
+  MasterUserPasswordParameter:
+    Type: "AWS::SSM::Parameter"
+    Properties:
+      Description: "MasterUserPassword"
+      Name: !Sub "${ProjectName}-${Env}-${Role}-MasterUserPassword"
+      Tier: "Standard"
+      Type: "String"
+      Value: !Ref MasterUserPassword
+      Tags:
+        "Env": !Ref Env
+        "Role": !Ref Role
+
   # Set Route53 record
-  SetRecord:
+  RecordSet:
     Type: "AWS::Route53::RecordSet"
     Properties:
       Comment: !Sub "for ${Role}"
@@ -150,5 +169,5 @@ Resources:
       Name: !Sub "${Role}-db.${DomainName}"
       ResourceRecords:
         - !GetAtt DbCuster.Endpoint.Address
-      TTL: "60"
+      TTL: 60
       Type: "CNAME"
