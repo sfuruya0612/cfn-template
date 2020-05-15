@@ -136,6 +136,18 @@ Resources:
           Value: !Ref Role
 
   # Parameter Store
+  MysqlHostnameParameter:
+    Type: "AWS::SSM::Parameter"
+    Properties:
+      Description: "MysqlHostname"
+      Name: !Sub "${ProjectName}-${Env}-${Role}-MysqlHostname"
+      Tier: "Standard"
+      Type: "String"
+      Value: !GetAtt DbCuster.Endpoint.Address
+      Tags:
+        "Env": !Ref Env
+        "Role": !Ref Role
+
   MasterUsernameParameter:
     Type: "AWS::SSM::Parameter"
     Properties:
