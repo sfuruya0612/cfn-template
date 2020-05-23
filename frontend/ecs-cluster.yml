@@ -1,0 +1,35 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ECS Cluster
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: "default"
+    Description: "Project(Service) name"
+  Env:
+    Type: String
+    Default: "dev"
+    Description: "Environment"
+  Role:
+    Type: String
+    Default: ""
+    Description: ""
+
+Resources:
+  # ECS Cluster
+  Cluster:
+    Type: "AWS::ECS::Cluster"
+    Properties:
+      ClusterName: !Sub "${ProjectName}-${Env}-ecs-cluster"
+      ClusterSettings:
+        - Name: "containerInsights"
+          Value: "enabled"
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role

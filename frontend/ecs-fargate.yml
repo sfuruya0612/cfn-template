@@ -1,0 +1,340 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  ECS on Fargate
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: "default"
+    Description: "Project(Service) name"
+  Env:
+    Type: String
+    Default: "dev"
+    Description: "Environment"
+  Role:
+    Type: String
+    Default: ""
+    Description: ""
+  Port:
+    Type: Number
+    Default: 8080
+    Description: "Ingress Port"
+  HealthCheckPath:
+    Type: String
+    Default: "/api/healthcheck"
+    Description: "ALB healthcheck path"
+  HealthCheckPort:
+    Type: String
+    Default: "8080"
+    Description: "ALB healthcheck port"
+  RetentionInDays:
+    Type: Number
+    Default: 7
+    Description: "Cloudwatch LogGroup retention days"
+  Command:
+    Type: String
+    Default: "env"
+    Description: "Execute command on container"
+  DesiredCount:
+    Type: Number
+    Default: 1
+    Description: "ECS service desired count"
+  DomainName:
+    Type: String
+    Default: ""
+    Description: ""
+  Logging:
+    Type: String
+    Default: "false"
+    Description: ""
+    AllowedValues:
+      - "true"
+      - "false"
+
+Conditions:
+  IsLogging: !Equals [ !Ref Logging, "true" ]
+
+Outputs:
+  LoadBalancerDNSName:
+    Value: !GetAtt LoadBalancer.DNSName
+    Export:
+      Name: !Sub "${ProjectName}-${Env}-${Role}-alb"
+
+Resources:
+   # IAM Role
+  IamRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "ecs.amazonaws.com"
+                - "ecs-tasks.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+        - "arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess"
+        - "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
+      Path: "/"
+      RoleName: !Sub "${ProjectName}-${Env}-${Role}-iam-role"
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
+
+  # Security Group
+  AlbSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub "for ${Role} alb"
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: 443
+          ToPort: 443
+          CidrIp: "0.0.0.0/0"
+      SecurityGroupEgress:
+        - IpProtocol : "-1"
+          CidrIp: "0.0.0.0/0"
+      VpcId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-${Role}-alb-sg"
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
+
+  EcsSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub "for ${Role} ecs"
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: !Ref Port
+          ToPort: !Ref Port
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+      SecurityGroupEgress:
+        - IpProtocol : "-1"
+          CidrIp: "0.0.0.0/0"
+      VpcId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Env}-${Role}-ecs-sg"
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
+
+  # Target Group
+  TargetGroup:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: !Ref HealthCheckPath
+      HealthCheckPort: !Ref HealthCheckPort
+      HealthCheckProtocol: "HTTP"
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      Name: !Sub "${ProjectName}-${Env}-${Role}-tg"
+      Port: !Ref Port
+      Protocol: "HTTP"
+      TargetType: "ip"
+      UnhealthyThresholdCount: 2
+      VpcId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
+
+  # Listener
+  Listener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      Certificates:
+        - CertificateArn: { "Fn::ImportValue": !Sub "${ProjectName}-certificate-arn" }
+      DefaultActions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: "forward"
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 443
+      Protocol: "HTTPS"
+
+  # LoadBalancer
+  LoadBalancer:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      IpAddressType: "ipv4"
+      LoadBalancerAttributes:
+        - Key: access_logs.s3.enabled
+          Value: !Ref Logging
+        - !If
+          - IsLogging
+          - Key: access_logs.s3.bucket
+            Value: !Sub "${ProjectName}-${Env}-log"
+          - !Ref AWS::NoValue
+      Name: !Sub "${ProjectName}-${Env}-${Role}-alb"
+      Scheme: "internet-facing"
+      SecurityGroups:
+        - !Ref AlbSecurityGroup
+      Subnets:
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-uno-subnet" }
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-due-subnet" }
+        - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-tri-subnet" }
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
+
+  # Cloudwatch LogGroup
+  LogGroup:
+    Type: "AWS::Logs::LogGroup"
+    Properties:
+      LogGroupName: !Sub "/aws/ecs/${ProjectName}-${Env}"
+      RetentionInDays: !Ref RetentionInDays
+
+  # Task Definition
+  TaskDefinition:
+    Type: "AWS::ECS::TaskDefinition"
+    Properties:
+      ContainerDefinitions:
+        # - Command:
+        #     - "cat /usr/local/etc/envoy.yaml && /usr/local/bin/envoy -c /usr/local/etc/envoy.yaml"
+        #   Cpu: 256
+        #   EntryPoint:
+        #     - "sh"
+        #     - "-c"
+        #   Name: "proxy"
+        #   Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}-${Env}/proxy:latest"
+        #   LogConfiguration:
+        #     LogDriver: "awslogs"
+        #     Options:
+        #       awslogs-group: !Sub "/aws/ecs/${ProjectName}-${Env}"
+        #       awslogs-region: !Ref "AWS::Region"
+        #       awslogs-stream-prefix: "proxy"
+        #   Memory: 512
+        #   PortMappings:
+        #     - Protocol: "tcp"
+        #       HostPort: 8080
+        #       ContainerPort: 8080
+        #   # User: "1234"
+        - Command:
+            - !Ref Command
+          Cpu: 256
+          EntryPoint:
+            - "sh"
+            - "-c"
+          Name: !Ref Role
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}-${Env}/${Role}:latest"
+          LogConfiguration:
+            LogDriver: "awslogs"
+            Options:
+              awslogs-group: !Sub "/aws/ecs/${ProjectName}-${Env}"
+              awslogs-region: !Ref "AWS::Region"
+              awslogs-stream-prefix: !Ref Role
+          Memory: 512
+          PortMappings:
+            - Protocol: "tcp"
+              HostPort: 4000
+              ContainerPort: 4000
+          Secrets:
+            - Name: MYSQL_HOSTNAME
+              ValueFrom: !Sub "${ProjectName}-${Env}-${Role}-MysqlHostname"
+            - Name: MASTER_USERNAME
+              ValueFrom: !Sub "${ProjectName}-${Env}-${Role}-MasterUsername"
+            - Name: MASTER_USERPASSWORD
+              ValueFrom: !Sub "${ProjectName}-${Env}-${Role}-MasterUserPassword"
+      Cpu: "512"
+      ExecutionRoleArn: !GetAtt IamRole.Arn
+      Family: !Sub "${ProjectName}-${Env}-${Role}"
+      Memory: "1024"
+      NetworkMode: "awsvpc"
+      # ProxyConfiguration:
+      #   ContainerName: !Sub "${ProjectName}-${Env}-proxy"
+      #   ProxyConfigurationProperties:
+      #     - Name: "IgnoredUID"
+      #       Value: "1234"
+      #     - Name: "IgnoredGID"
+      #       Value: ""
+      #     - Name: "AppPorts"
+      #       Value: "8080"
+      #     - Name: "ProxyIngressPort"
+      #       Value: "8080"
+      #     - Name: "ProxyEgressPort"
+      #       Value: "8080"
+      #     - Name: "EgressIgnoredPorts"
+      #       Value: ""
+      #     - Name: "EgressIgnoredIPs"
+      #       Value: ""
+      #   Type: "APPMESH"
+      RequiresCompatibilities:
+        - "FARGATE"
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
+
+  Service:
+    Type: "AWS::ECS::Service"
+    DependsOn:
+      - LoadBalancer
+      - Listener
+    Properties:
+      Cluster: !Sub "${ProjectName}-${Env}-ecs-cluster"
+      DesiredCount: !Ref DesiredCount
+      HealthCheckGracePeriodSeconds: 30
+      LaunchType: "FARGATE"
+      LoadBalancers:
+        # - ContainerName: "proxy"
+        - ContainerName: !Sub "${Role}"
+          ContainerPort: !Ref Port
+          TargetGroupArn: !Ref TargetGroup
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: "ENABLED"
+          SecurityGroups:
+            - !Ref EcsSecurityGroup
+          Subnets:
+            - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-uno-subnet" }
+            - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-due-subnet" }
+            - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-tri-subnet" }
+      ServiceName: !Sub "${ProjectName}-${Env}-${Role}"
+      # ServiceRegistry:
+      #   - ContainerName: "proxy"
+      #     ContainerPort: 8080
+      #   - ContainerName: !Ref Role
+      #     ContainerPort: 4000
+      TaskDefinition: !Ref TaskDefinition
+
+  # Set Route53 record
+  RecordSet:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt LoadBalancer.DNSName
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
+      Comment: !Sub "for ${Env} ${Role}"
+      HostedZoneName: !Sub "${DomainName}."
+      Name: !Sub "${Env}-${Role}.${DomainName}"
+      Type: "A"

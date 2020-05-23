@@ -16,6 +16,10 @@ Parameters:
     Type: String
     Default: "app"
     Description: ""
+  DatabaseName:
+    Type: String
+    Default: ""
+    Description: "Database name"
   MasterUsername:
     Type: String
     Default: admin
@@ -24,10 +28,6 @@ Parameters:
     Type: String
     Description: "Database default user password"
     NoEcho: true
-  DomainName:
-    Type: String
-    Default: ""
-    Description: ""
   AdmFlag:
     Type: String
     Default: "false"
@@ -37,7 +37,8 @@ Parameters:
       - "false"
 
 Conditions:
-  IsAdmSubnet: !Equals [ !Ref AdmFlag, "true"]
+  IsAdmSubnet: !Equals [ !Ref AdmFlag, "true" ]
+  IsDatabaseName: !Not [ !Equals [ !Ref DatabaseName, "" ] ]
 
 Resources:
   # Security Group
@@ -62,6 +63,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-${Role}-rds-sg"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
         - Key: Role
@@ -78,6 +81,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-${Role}-param-cluster"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
         - Key: Role
@@ -113,6 +118,10 @@ Resources:
           - !Select [ "1", !GetAZs ""]
           - !Select [ "2", !GetAZs ""]
       BackupRetentionPeriod: 3
+      DatabaseName: !If
+        - IsDatabaseName
+        - !Ref DatabaseName
+        - !Ref AWS::NoValue
       DBClusterParameterGroupName: !Ref ClusterParameterGroup
       DBSubnetGroupName: !Ref SubnetGroup
       Engine: "aurora"
@@ -130,6 +139,8 @@ Resources:
       VpcSecurityGroupIds:
         - !Ref SecurityGroup
       Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
         - Key: Role
@@ -145,6 +156,7 @@ Resources:
       Type: "String"
       Value: !GetAtt DbCuster.Endpoint.Address
       Tags:
+        "ProjectName": !Ref ProjectName
         "Env": !Ref Env
         "Role": !Ref Role
 
@@ -157,6 +169,7 @@ Resources:
       Type: "String"
       Value: !Ref MasterUsername
       Tags:
+        "ProjectName": !Ref ProjectName
         "Env": !Ref Env
         "Role": !Ref Role
 
@@ -169,17 +182,6 @@ Resources:
       Type: "String"
       Value: !Ref MasterUserPassword
       Tags:
+        "ProjectName": !Ref ProjectName
         "Env": !Ref Env
         "Role": !Ref Role
-
-  # Set Route53 record
-  RecordSet:
-    Type: "AWS::Route53::RecordSet"
-    Properties:
-      Comment: !Sub "for ${Role}"
-      HostedZoneName: !Sub "${DomainName}."
-      Name: !Sub "${Role}-db.${DomainName}"
-      ResourceRecords:
-        - !GetAtt DbCuster.Endpoint.Address
-      TTL: 60
-      Type: "CNAME"

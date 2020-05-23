@@ -75,6 +75,8 @@ Resources:
           PolicyName: !Sub "${ProjectName}-${Env}-${Role}-iam-policy"
       RoleName: !Sub "${ProjectName}-${Env}-${Role}-iam-role"
       Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
         - Key: Role
@@ -103,6 +105,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-${Role}-alb-sg"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
         - Key: Role
@@ -125,6 +129,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-${Role}-ec2-sg"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
         - Key: Role
@@ -222,6 +228,9 @@ Resources:
         - Key: Name
           PropagateAtLaunch: true
           Value: !Sub "${ProjectName}-${Env}-${Role}-ec2"
+        - Key: ProjectName
+          PropagateAtLaunch: true
+          Value: !Ref ProjectName
         - Key: Env
           PropagateAtLaunch: true
           Value: !Ref Env
@@ -246,6 +255,8 @@ Resources:
       UnhealthyThresholdCount: 5
       VpcId: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-vpc" }
       Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
         - Key: Role
@@ -283,6 +294,8 @@ Resources:
         - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-due-subnet" }
         - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-tri-subnet" }
       Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
         - Key: Role

@@ -1,0 +1,174 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  CloudFront and S3 (Optional ALB)
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: "default"
+    Description: "Project(Service) name"
+  Env:
+    Type: String
+    Default: "dev"
+    Description: "Environment"
+  Role:
+    Type: String
+    Default: ""
+    Description: ""
+  OriginAlb:
+    Type: String
+    Default: "false"
+    Description: "Set ALB to CloudFront origin"
+    AllowedValues:
+      - "true"
+      - "false"
+  DefaultTTL:
+    Type: String
+    Default: "900"
+    Description: ""
+  CertificateArn:
+    Type: String
+    Default: ""
+    Description: ""
+  PriceClass:
+    Type: String
+    Default: "PriceClass_200"
+    Description: ""
+  DomainName:
+    Type: String
+    Default: ""
+    Description: ""
+  Logging:
+    Type: String
+    Default: "false"
+    Description: ""
+    AllowedValues:
+      - "true"
+      - "false"
+
+Conditions:
+  IsOriginAlb: !Equals [ !Ref OriginAlb, "true" ]
+  IsLogging: !Equals [ !Ref Logging, "true" ]
+
+Resources:
+  # CloudFront Origin Access Identity
+  CloudFrontOriginAccessIdentity:
+    Type: "AWS::CloudFront::CloudFrontOriginAccessIdentity"
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Ref AWS::StackName
+
+  Bucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Sub "${ProjectName}-${Env}-${Role}"
+      VersioningConfiguration:
+        Status: "Enabled"
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
+
+  BucketPolicy:
+    Type: "AWS::S3::BucketPolicy"
+    Properties:
+      Bucket: !Ref Bucket
+      PolicyDocument:
+        Statement:
+          - Sid: "StaticBucketPolicy"
+            Effect: "Allow"
+            Principal:
+              AWS: !Sub "arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${CloudFrontOriginAccessIdentity}"
+            Action: "s3:GetObject"
+            Resource: !Sub "${Bucket.Arn}/*"
+
+  Distribution:
+    Type: "AWS::CloudFront::Distribution"
+    Properties:
+      DistributionConfig:
+        Aliases:
+          - !Sub "${Env}-${Role}.${DomainName}"
+        CacheBehaviors:
+          - !If
+            - IsOriginAlb
+            - AllowedMethods:
+                - "GET"
+                - "HEAD"
+                - "OPTIONS"
+                - "PUT"
+                - "PATCH"
+                - "POST"
+                - "DELETE"
+              DefaultTTL: !Ref DefaultTTL
+              ForwardedValues:
+                Cookies:
+                  Forward: "none"
+                Headers:
+                  - "*"
+                QueryString: true
+              PathPattern: "/api/*"
+              TargetOriginId: "ALBOrigin"
+              ViewerProtocolPolicy: "https-only"
+            - !Ref AWS::NoValue
+        CustomErrorResponses:
+          - ErrorCachingMinTTL: 0
+            ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: "/"
+        DefaultCacheBehavior:
+          DefaultTTL: !Ref DefaultTTL
+          ForwardedValues:
+            Cookies:
+              Forward: "none"
+            QueryString: false
+          TargetOriginId: "S3Origin"
+          ViewerProtocolPolicy: "https-only"
+        DefaultRootObject: "index.html"
+        Enabled: true
+        HttpVersion: "http2"
+        Logging: !If
+          - IsLogging
+          - Bucket: !Sub "${ProjectName}-${Env}-log.s3.amazonaws.com"
+            IncludeCookies: false
+            Prefix: "AWSLogs/CloudFrontAccessLogs/"
+          - !Ref AWS::NoValue
+        Origins:
+          - DomainName: !GetAtt Bucket.DomainName
+            Id: "S3Origin"
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub "origin-access-identity/cloudfront/${CloudFrontOriginAccessIdentity}"
+          - !If
+            - IsOriginAlb
+            - CustomOriginConfig:
+                HTTPSPort: 443
+                OriginProtocolPolicy: "https-only"
+              DomainName: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-api-alb" }
+              Id: "ALBOrigin"
+            - !Ref AWS::NoValue
+        PriceClass: !Ref PriceClass
+        ViewerCertificate:
+          AcmCertificateArn: !Ref CertificateArn
+          MinimumProtocolVersion: "TLSv1.2_2018"
+          SslSupportMethod: "sni-only"
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
+
+  Route53DNSRecord:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt Distribution.DomainName
+        HostedZoneId: "Z2FDTNDATAQYW2"
+      Comment: !Sub "for ${Env} ${Role}"
+      HostedZoneName: !Sub "${DomainName}."
+      Name: !Sub "${Env}-${Role}.${DomainName}"
+      Type: "A"

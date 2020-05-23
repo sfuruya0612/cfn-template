@@ -99,6 +99,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-vpc"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
 
@@ -135,6 +137,8 @@ Resources:
           PolicyName: "flowlogsPolicy"
       RoleName: "flowlogsRole"
       Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
 
@@ -169,6 +173,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-adm-pub-uno-subnet"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
   SubnetAdmPub2:
@@ -181,6 +187,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-adm-pub-due-subnet"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
   SubnetAdmPri1:
@@ -192,6 +200,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-adm-pri-uno-subnet"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
   SubnetAdmPri2:
@@ -203,6 +213,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-adm-pri-due-subnet"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
   SubnetPub1:
@@ -215,6 +227,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-pub-uno-subnet"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
   SubnetPub2:
@@ -227,6 +241,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-pub-due-subnet"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
   SubnetPub3:
@@ -239,6 +255,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-pub-tre-subnet"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
   SubnetPri1:
@@ -250,6 +268,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-pri-uno-subnet"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
   SubnetPri2:
@@ -261,6 +281,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-pri-due-subnet"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
   SubnetPri3:
@@ -272,6 +294,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-pri-tre-subnet"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
 
@@ -282,6 +306,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-igw"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
   Gw1:
@@ -300,6 +326,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-dopt"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
   DhcpAssoc1:
@@ -316,6 +344,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-acl"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
   Acl1:
@@ -396,6 +426,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-pub-rtb"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
   RtbPri:
@@ -405,6 +437,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-pri-rtb"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
 

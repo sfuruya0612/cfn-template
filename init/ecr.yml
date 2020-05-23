@@ -23,9 +23,29 @@ Resources:
     Type: "AWS::ECR::Repository"
     Properties:
       RepositoryName: !Sub "${ProjectName}-${Env}/${Role}"
+      # RepositoryPolicyText:
+      #   Version: "2012-10-17"
+      #   Statement:
+      #     -
+      #       Effect: "Allow"
+      #       Principal:
+      #         AWS:
+      #           - !Sub "arn:aws:iam::${AWS::AccountId}:user/*"
+      #       Action:
+      #         - "ecr:BatchCheckLayerAvailability"
+      #         - "ecr:BatchGetImage"
+      #         - "ecr:CompleteLayerUpload"
+      #         - "ecr:GetDownloadUrlForLayer"
+      #         - "ecr:InitiateLayerUpload"
+      #         - "ecr:PutImage"
+      #         - "ecr:UploadLayerPart"
+      #       Resource:
+      #         - !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ProjectName}-${Env}/${Role}"
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-${Env}-${Role}-ecr"
+        - Key: ProjectName
+          Value: !Ref ProjectName
         - Key: Env
           Value: !Ref Env
         - Key: Role
