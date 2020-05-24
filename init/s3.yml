@@ -16,6 +16,13 @@ Parameters:
     Type: String
     Default: ""
     Description: ""
+  Versioning:
+    Type: String
+    Default: "false"
+    Description: ""
+    AllowedValues:
+      - "true"
+      - "false"
   Logging:
     Type: String
     Default: "false"
@@ -29,6 +36,7 @@ Parameters:
     Description: "Log Retention Period (Enabled when the Logging parameter is true)"
 
 Conditions:
+  IsVersioning: !Equals [ !Ref Versioning, "true" ]
   IsLogging: !Equals [ !Ref Logging, "true" ]
 
 Resources:
@@ -37,13 +45,16 @@ Resources:
     Type: "AWS::S3::Bucket"
     Properties:
       BucketName: !Sub "${ProjectName}-${Env}-${Role}"
-      LifecycleConfiguration:
-        Rules: !If
-          - IsLogging
-          -
-            - ExpirationInDays: !Ref ExpirationInDays
-              Status: "Enabled"
-          - !Ref AWS::NoValue
+      LifecycleConfiguration: !If
+        - IsLogging
+        - Rules:
+          - ExpirationInDays: !Ref ExpirationInDays
+            Status: "Enabled"
+        - !Ref AWS::NoValue
+      VersioningConfiguration: !If
+        - IsVersioning
+        - Status: "Enabled"
+        - !Ref AWS::NoValue
       Tags:
         - Key: ProjectName
           Value: !Ref ProjectName

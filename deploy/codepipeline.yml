@@ -1,0 +1,221 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  CodePipeline and CodeDeploy
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: "default"
+    Description: "Project(Service) name"
+  Env:
+    Type: String
+    Default: "dev"
+    Description: "Environment"
+  Role:
+    Type: String
+    Default: ""
+    Description: ""
+  ComputePlatform:
+    Type: String
+    Default: "ECS"
+    Description: "CodeDeploy application compute platform"
+    AllowedValues:
+      - "ECS"
+      - "Lambda"
+      - "Server"
+  DeploymentConfigName:
+    Type: String
+    Default: "CodeDeployDefault.ECSLinear10PercentEvery1Minutes"
+    Description: ""
+  ImageTag:
+    Type: String
+    Default: "latest"
+    Description: ""
+
+Resources:
+  # IAM Role
+  # 自動生成されるものを少し精査して落とし込んでいるが、不要そうな設定は追々削除したい
+  PipelineIamRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Action:
+              - "sts:AssumeRole"
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "codepipeline.amazonaws.com"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+        - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+      Path: "/service-role/"
+      Policies:
+        - PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "iam:PassRole"
+                Resource: "*"
+                Condition:
+                  StringEqualsIfExists:
+                    iam:PassedToService:
+                      - "cloudformation.amazonaws.com"
+                      # - "elasticbeanstalk.amazonaws.com"
+                      # - "ec2.amazonaws.com"
+                      - "ecs-tasks.amazonaws.com"
+              - Effect: "Allow"
+                Action:
+                  - "codebuild:BatchGetBuilds"
+                  - "codebuild:StartBuild"
+                  - "codecommit:CancelUploadArchive"
+                  - "codecommit:GetBranch"
+                  - "codecommit:GetCommit"
+                  - "codecommit:GetUploadArchiveStatus"
+                  - "codecommit:UploadArchive"
+                  - "codedeploy:CreateDeployment"
+                  - "codedeploy:GetApplication"
+                  - "codedeploy:GetApplicationRevision"
+                  - "codedeploy:GetDeployment"
+                  - "codedeploy:GetDeploymentConfig"
+                  - "codedeploy:RegisterApplicationRevision"
+                  - "codestar-connections:UseConnection"
+                  # - "elasticbeanstalk:*"
+                  - "sns:*"
+                  - "cloudformation:*"
+                  # - "rds:*"
+                  # - "sqs:*"
+                  - "ecs:*"
+                  - "ecr:DescribeImages"
+                  # - "lambda:InvokeFunction"
+                  # - "lambda:ListFunctions"
+                Resource: "*"
+          PolicyName: !Sub "${ProjectName}-${Env}-pipeline-${Role}-iam-policy"
+      RoleName: !Sub "${ProjectName}-${Env}-pipeline-${Role}-iam-role"
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
+
+  DeployIamRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Action:
+              - "sts:AssumeRole"
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "codedeploy.amazonaws.com"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AWSCodeDeployRoleForECS"
+        - "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRoleForLambda"
+        - "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"
+      RoleName: !Sub "${ProjectName}-${Env}-deploy-${Role}-iam-role"
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role
+
+  # # Application
+  # Application:
+  #   Type: "AWS::CodeDeploy::Application"
+  #   Properties:
+  #     ApplicationName: !Sub "${ProjectName}-${Env}-${Role}"
+  #     ComputePlatform: !Ref ComputePlatform
+
+  # # Deployment Group
+  # DeploymentGroup:
+  #   Type: "AWS::CodeDeploy::DeploymentGroup"
+  #   Properties:
+  #     ApplicationName: !Ref Application
+  #     AutoRollbackConfiguration:
+  #       Enabled: true
+  #       Events:
+  #         - DEPLOYMENT_FAILURE
+  #         - DEPLOYMENT_STOP_ON_ALARM
+  #         - DEPLOYMENT_STOP_ON_REQUEST
+  #     DeploymentConfigName: !Ref DeploymentConfigName
+  #     DeploymentGroupName:  !Sub "${ProjectName}-${Env}-${Role}"
+  #     DeploymentStyle:
+  #       DeploymentOption: "WITH_TRAFFIC_CONTROL"
+  #       DeploymentType: "IN_PLACE"
+  #     LoadBalancerInfo:
+  #       TargetGroupInfoList:
+  #         - Name: !Sub "${ProjectName}-${Env}-${Role}-tg"
+  #     ServiceRoleArn: !GetAtt DeployIamRole.Arn
+
+  # Code Pipeline
+  Pipeline:
+    Type: "AWS::CodePipeline::Pipeline"
+    Properties:
+      ArtifactStore:
+        Location: !Sub "${ProjectName}-${Env}-deploy"
+        Type: "S3"
+      Name: !Sub "${ProjectName}-${Env}-${Role}"
+      RestartExecutionOnUpdate: False
+      RoleArn: !GetAtt PipelineIamRole.Arn
+      Stages:
+        - Actions:
+          - ActionTypeId:
+              Category: "Source"
+              Owner: "AWS"
+              Provider: "ECR"
+              Version: "1"
+            Configuration:
+              ImageTag: !Ref ImageTag
+              RepositoryName: !Sub "${ProjectName}-${Env}/${Role}"
+            Name: "ImageSource"
+            OutputArtifacts:
+              - Name: "SourceArtifact"
+            RunOrder: 1
+          Name: "ImageSource"
+        # - Actions:
+        #   - ActionTypeId:
+        #       Category: "Source"
+        #       Owner: "AWS"
+        #       Provider: "S3"
+        #       Version: "1"
+        #     Configuration:
+        #       S3Bucket: !Sub "${ProjectName}-${Env}-deploy"
+        #       S3ObjectKey: !Sub "imagedefinitions_${Role}.json"
+        #     Name: "S3Source"
+        #     OutputArtifacts:
+        #       - Name: "S3SourceArtifact"
+        #     RunOrder: 1
+        #   Name: "S3Source"
+        - Actions:
+          - ActionTypeId:
+              Category: "Deploy"
+              Owner: "AWS"
+              Provider: "ECS"
+              Version: "1"
+            Configuration:
+              ClusterName: !Sub "${ProjectName}-${Env}-ecs-cluster"
+              ServiceName: { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-${Role}" }
+              FileName: !Sub "imagedefinitions_${Role}.json.zip"
+            InputArtifacts:
+              - Name: "SourceArtifact"
+            Name: "Deploy"
+            RunOrder: 1
+          Name: "Deploy"
+      Tags:
+        - Key: ProjectName
+          Value: !Ref ProjectName
+        - Key: Env
+          Value: !Ref Env
+        - Key: Role
+          Value: !Ref Role

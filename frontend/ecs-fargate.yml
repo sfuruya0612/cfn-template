@@ -60,6 +60,10 @@ Outputs:
     Value: !GetAtt LoadBalancer.DNSName
     Export:
       Name: !Sub "${ProjectName}-${Env}-${Role}-alb"
+  ServiceName:
+    Value: !Ref Service
+    Export:
+      Name: !Sub "${ProjectName}-${Env}-${Role}-ecs-service"
 
 Resources:
    # IAM Role
@@ -302,6 +306,8 @@ Resources:
       - Listener
     Properties:
       Cluster: !Sub "${ProjectName}-${Env}-ecs-cluster"
+      DeploymentController:
+        Type: "CODE_DEPLOY"
       DesiredCount: !Ref DesiredCount
       HealthCheckGracePeriodSeconds: 30
       LaunchType: "FARGATE"
@@ -319,7 +325,6 @@ Resources:
             - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-uno-subnet" }
             - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-due-subnet" }
             - { "Fn::ImportValue": !Sub "${ProjectName}-${Env}-pub-tri-subnet" }
-      ServiceName: !Sub "${ProjectName}-${Env}-${Role}"
       # ServiceRegistry:
       #   - ContainerName: "proxy"
       #     ContainerPort: 8080
